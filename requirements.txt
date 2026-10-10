@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+mss
+numpy
+pillow
+tinytuya
+pytest
+httpx

@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WiZ Screen Sync</title>
+<style>
+  :root {
+    --bg: #f4f3f0; --card: #fff; --ink: #1b1b1f; --mute: #6b6b73; --line: #e2e0da;
+    --accent: #3b5bfd; --accent-ink: #fff; --danger: #d23b3b; --ok: #1f9d55;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141416; --card: #1e1e22; --ink: #f1f1f3; --mute: #9a9aa3; --line: #2e2e34; --accent: #6b83ff; }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, "Inter", system-ui, sans-serif; }
+  main { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+  h1 { font-size: 22px; margin: 0; flex: 1; letter-spacing: -.01em; }
+  .swatch { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: #000; transition: background .15s; }
+  .grid { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  section.wide { grid-column: 1 / -1; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); margin: 0 0 12px; font-weight: 600; }
+  label { display: block; font-size: 13px; color: var(--mute); margin: 12px 0 4px; }
+  label output { float: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+  select, input[type=text], input[type=password] { width: 100%; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  button { font: inherit; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.stop { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row > * { flex: none; }
+  .row > input[type=text], .row > input[type=password], .row > select { flex: 1; min-width: 0; }
+  .bulbs { margin-top: 10px; display: grid; gap: 6px; }
+  .bulbs button { text-align: left; }
+  .bulbItem { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+  .bulbItem input { flex: none; }
+  .bulbItem .meta { flex: 1; min-width: 0; }
+  .bulbItem .meta b { font-weight: 600; }
+  .bulbItem .meta small { display: block; color: var(--mute); font-size: 12px; overflow-wrap: anywhere; }
+  .bulbItem button { padding: 4px 9px; font-size: 13px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; border: 1px solid var(--line); background: #000; transition: background .12s; }
+  .bulbItem select { width: auto; padding: 4px 6px; font-size: 13px; }
+  .check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; margin: 14px 0 0; }
+  .presets button { padding: 6px 12px; }
+  .tag { font-size: 11px; padding: 1px 6px; border-radius: 99px; border: 1px solid var(--line); color: var(--mute); margin-left: 6px; }
+  .card2 { margin-top: 12px; padding: 12px; border: 1px dashed var(--line); border-radius: 10px; }
+  .card2 select { width: auto; }
+  code { font-size: 12px; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+  a { color: var(--accent); }
+  .preview { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 10px; object-fit: contain; display: block; margin-top: 12px; }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: transparent; }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); }
+  #status { font-size: 13px; color: var(--mute); }
+  #status.err { color: var(--danger); }
+  #status.run { color: var(--ok); }
+  .hint { font-size: 12px; color: var(--mute); margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>WiZ Screen Sync <span class="tag" id="demoTag" hidden>demo</span></h1>
+    <span id="status">Idle</span>
+    <div class="swatch" id="swatch" title="Colour being sent to the bulb"></div>
+    <button id="toggle" class="primary">Start</button>
+  </header>
+
+  <div class="grid">
+    <section>
+      <h2>Bulbs</h2>
+      <div class="bulbs" id="bulbList"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="discover">Discover</button>
+        <button id="addManual">Add manually</button>
+      </div>
+      <div class="bulbs" id="found"></div>
+
+      <form id="bulbForm" class="card2" hidden>
+        <div class="row">
+          <select id="f_type"><option value="wiz">WiZ</option><option value="tuya">Wipro / Tuya</option></select>
+          <input type="text" id="f_name" placeholder="Name (optional)">
+        </div>
+        <label for="f_ip">IP address</label>
+        <input type="text" id="f_ip" placeholder="192.168.1.x" required>
+        <div id="tuyaFields">
+          <label for="f_dev">Device ID</label>
+          <input type="text" id="f_dev" autocomplete="off">
+          <label for="f_key">Local key <span id="keyNote"></span></label>
+          <input type="password" id="f_key" autocomplete="off" placeholder="stored only in config.json on this Mac">
+          <label for="f_ver">Protocol version</label>
+          <select id="f_ver"><option>3.5</option><option>3.4</option><option>3.3</option><option>3.1</option></select>
+          <p class="hint">Wipro bulbs run on Tuya. Get the Device ID and Local Key once from
+            <a href="https://iot.tuya.com" target="_blank" rel="noopener">iot.tuya.com</a>
+            (Cloud &rarr; your project &rarr; Devices), or run <code>.venv/bin/python -m tinytuya wizard</code>.</p>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button type="submit" class="primary">Save bulb</button>
+          <button type="button" id="f_cancel">Cancel</button>
+        </div>
+      </form>
+
+      <div class="row" style="margin-top:14px">
+        <button data-test="on">On</button>
+        <button data-test="off">Off</button>
+        <button data-test="255,0,0">Red</button>
+        <button data-test="0,255,0">Green</button>
+        <button data-test="0,0,255">Blue</button>
+      </div>
+      <p class="hint">Tests go to every ticked bulb. WiZ: enable <em>Allow local communication</em> in the WiZ app (Settings &rarr; Security).</p>
+    </section>
+
+    <section>
+      <h2>Monitor</h2>
+      <select id="monitor"></select>
+      <img class="preview" id="preview" alt="Monitor preview">
+    </section>
+
+    <section class="wide">
+      <h2>Colour</h2>
+      <div class="row presets" id="presets" style="margin-bottom:6px">
+        <span class="hint" style="margin:0 4px 0 0">Presets</span>
+        <button type="button" data-preset="movie">Movie</button>
+        <button type="button" data-preset="gaming">Gaming</button>
+        <button type="button" data-preset="ambient">Ambient</button>
+        <button type="button" data-preset="party">Party</button>
+      </div>
+      <div class="grid">
+        <div>
+          <label>Mode</label>
+          <div class="seg" id="mode"><button data-v="average">Average</button><button data-v="dominant">Dominant</button><button data-v="brightest">Brightest</button><button data-v="saturated">Saturated</button></div>
+          <label>Brightness</label>
+          <div class="seg" id="brightness_mode"><button data-v="follow">Follow screen</button><button data-v="fixed">Fixed</button></div>
+          <label id="fixedLabel">Fixed level <output></output></label>
+          <input type="range" id="brightness" min="10" max="100">
+          <label id="minLabel">Minimum when following <output></output></label>
+          <input type="range" id="min_brightness" min="10" max="100">
+          <label class="check"><input type="checkbox" id="ignore_black_bars"> Ignore black bars (letterboxed video)</label>
+          <label for="stop_action">When I press Stop</label>
+          <select id="stop_action">
+            <option value="leave">Leave the bulbs as they are</option>
+            <option value="warm">Set warm white</option>
+            <option value="off">Turn the bulbs off</option>
+          </select>
+        </div>
+        <div>
+          <label>Smoothing <output></output></label>
+          <input type="range" id="smoothing" min="0" max="0.95" step="0.05">
+          <label>Saturation boost <output></output></label>
+          <input type="range" id="saturation" min="1" max="2.5" step="0.1">
+          <label>Latency compensation <output></output></label>
+          <input type="range" id="lead" min="0" max="300" step="10">
+          <label>Updates per second <output></output></label>
+          <input type="range" id="rate" min="1" max="30" step="1">
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let cfg = {};
+let running = false;
+
+const api = async (path, body) => {
+  const r = await fetch(path, body === undefined ? {} : {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  return r.json();
+};
+const save = patch => { Object.assign(cfg, patch); return api('/api/config', patch); };  // never sends bulbs
+
+function setStatus(text, cls = '') { const s = $('#status'); s.textContent = text; s.className = cls; }
+
+// ---- bulbs
+const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids); return n; };
+const ZONES = [['full', 'Whole screen'], ['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['bottom', 'Bottom'], ['center', 'Centre']];
+let lastStatus = {zones: {}};
+function paintDots() { document.querySelectorAll('.dot').forEach(d => { const c = lastStatus.zones && lastStatus.zones[d.dataset.zone]; d.style.background = c ? `rgb(${c.join(',')})` : '#000'; }); }
+const typeName = t => t === 'tuya' ? 'Wipro / Tuya' : 'WiZ';
+
+function renderBulbs() {
+  const list = $('#bulbList');
+  list.replaceChildren();
+  if (!cfg.bulbs.length) list.append(el('p', {className: 'hint', textContent: 'No bulbs yet. Press Discover to find them on your network.'}));
+  cfg.bulbs.forEach(b => {
+    const cb = el('input', {type: 'checkbox', checked: b.enabled, title: 'Include in sync'});
+    cb.onchange = async () => { try { setCfg(await api('/api/bulbs/enable', {id: b.id, enabled: cb.checked})); } catch (e) { setStatus(e.message, 'err'); } };
+    const edit = el('button', {type: 'button', textContent: 'Edit'}); edit.onclick = () => openForm(b);
+    const del = el('button', {type: 'button', textContent: '✕', title: 'Remove'});
+    del.onclick = async () => { if (confirm(`Remove ${b.name || b.ip}?`)) setCfg(await api('/api/bulbs/remove', {id: b.id})); };
+    const zone = el('select', {title: 'Which part of the screen this bulb follows'});
+    ZONES.forEach(([v, label]) => zone.append(el('option', {value: v, textContent: label, selected: (b.zone || 'full') === v})));
+    zone.onchange = async () => { try { setCfg(await api('/api/bulbs/zone', {id: b.id, zone: zone.value})); } catch (e) { setStatus(e.message, 'err'); } };
+    const dot = el('span', {className: 'dot', title: 'Colour being sent'}); dot.dataset.zone = b.zone || 'full';
+    list.append(el('div', {className: 'bulbItem'}, cb, dot,
+      el('div', {className: 'meta'}, el('b', {textContent: b.name || b.ip}), el('span', {className: 'tag', textContent: typeName(b.type)}),
+        el('small', {textContent: b.ip + (b.type === 'tuya' && !b.has_key ? ' · local key missing' : '')})), zone, edit, del));
+    paintDots();
+  });
+}
+function setCfg(c) { cfg = c; renderBulbs(); }
+
+function showTuyaFields() { $('#tuyaFields').hidden = $('#f_type').value !== 'tuya'; }
+$('#f_type').onchange = showTuyaFields;
+function openForm(b = {}) {
+  $('#bulbForm').hidden = false;
+  $('#bulbForm').dataset.id = b.id || '';
+  $('#f_type').value = b.type || 'wiz';
+  $('#f_name').value = b.name || '';
+  $('#f_ip').value = b.ip || '';
+  $('#f_dev').value = b.dev_id || '';
+  $('#f_key').value = '';
+  $('#keyNote').textContent = b.has_key ? '(saved — leave blank to keep)' : '';
+  $('#f_ver').value = b.version || '3.5';
+  showTuyaFields();
+  $('#bulbForm').scrollIntoView({block: 'nearest'});
+}
+$('#addManual').onclick = () => openForm();
+$('#f_cancel').onclick = () => { $('#bulbForm').hidden = true; };
+$('#bulbForm').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    setCfg(await api('/api/bulbs/save', {
+      id: $('#bulbForm').dataset.id || undefined, type: $('#f_type').value, name: $('#f_name').value, ip: $('#f_ip').value,
+      dev_id: $('#f_dev').value, key: $('#f_key').value, version: $('#f_ver').value,
+    }));
+    $('#f_key').value = '';
+    $('#bulbForm').hidden = true;
+    setStatus('Bulb saved');
+  } catch (err) { setStatus(err.message, 'err'); }
+};
+
+$('#discover').onclick = async () => {
+  setStatus('Searching…');
+  const out = $('#found'); out.replaceChildren();
+  try {
+    const found = await api('/api/bulbs/discover', {});
+    const known = new Set(cfg.bulbs.map(b => b.ip));
+    const fresh = found.filter(b => !known.has(b.ip));
+    if (!found.length) out.append(el('p', {className: 'hint', textContent: 'Nothing answered. Check wifi, or add a bulb manually.'}));
+    else if (!fresh.length) out.append(el('p', {className: 'hint', textContent: 'All bulbs found are already added.'}));
+    fresh.forEach(b => {
+      const btn = el('button', {type: 'button', textContent: `Add ${typeName(b.type)} bulb · ${b.ip}`});
+      btn.onclick = async () => {
+        if (b.type === 'wiz') { try { setCfg(await api('/api/bulbs/save', {type: 'wiz', ip: b.ip, name: 'WiZ bulb'})); btn.remove(); } catch (e) { setStatus(e.message, 'err'); } }
+        else openForm({type: 'tuya', ip: b.ip, dev_id: b.dev_id, version: b.version, name: 'Wipro bulb'});
+      };
+      out.append(btn);
+    });
+    setStatus(running ? 'Syncing' : 'Idle');
+  } catch (e) { setStatus(e.message, 'err'); }
+};
+document.querySelectorAll('[data-test]').forEach(b => b.onclick = async () => {
+  const v = b.dataset.test;
+  const body = {};
+  if (v === 'on') body.state = true; else if (v === 'off') body.state = false;
+  else { const [r, g, bl] = v.split(',').map(Number); Object.assign(body, {r, g, b: bl}); }
+  try {
+    const {results} = await api('/api/bulbs/test', body);
+    const bad = results.filter(r => !r.ok);
+    if (bad.length) setStatus(bad.map(r => `${r.name}: ${r.error}`).join('; '), 'err'); else setStatus('Sent');
+  } catch (e) { setStatus(e.message, 'err'); }
+});
+
+// ---- monitors
+let previewTimer;
+async function loadMonitors() {
+  const mons = await api('/api/monitors');
+  const sel = $('#monitor');
+  sel.innerHTML = mons.map(m => `<option value="${m.index}">Monitor ${m.index} — ${m.width}×${m.height}</option>`).join('');
+  if (!mons.some(m => m.index === cfg.monitor)) cfg.monitor = mons[0]?.index ?? 1;
+  sel.value = cfg.monitor;
+  refreshPreview();
+  clearInterval(previewTimer);
+  previewTimer = setInterval(refreshPreview, 1500);
+}
+document.addEventListener('visibilitychange', () => refreshPreview());
+function refreshPreview(force = false) {
+  if (document.hidden && !force && $('#preview').getAttribute('src')) return;
+  $('#preview').src = `/api/monitors/${cfg.monitor}/preview?t=${Date.now()}`;
+}
+$('#preview').onerror = () => setStatus('Preview failed. Grant Screen Recording permission to your terminal.', 'err');
+$('#monitor').onchange = e => { save({monitor: +e.target.value}); refreshPreview(); };
+
+// ---- controls
+function bindSeg(id) {
+  const el = $('#' + id);
+  el.querySelectorAll('button').forEach(b => b.onclick = () => { save({[id]: b.dataset.v}); syncSeg(id); syncVisibility(); });
+}
+function syncSeg(id) { $('#' + id).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === cfg[id])); }
+['mode', 'brightness_mode'].forEach(bindSeg);
+
+const fmt = {smoothing: v => (+v).toFixed(2), saturation: v => (+v).toFixed(1) + '×', rate: v => v + '/s', lead: v => v + ' ms', brightness: v => v + '%', min_brightness: v => v + '%'};
+Object.keys(fmt).forEach(id => {
+  const el = $('#' + id);
+  const out = el.previousElementSibling.querySelector('output');
+  const show = () => out.textContent = fmt[id](el.value);
+  el.oninput = show;
+  el.onchange = () => save({[id]: +el.value});
+  el._show = show;
+});
+function syncControls() {
+  Object.keys(fmt).forEach(id => { $('#' + id).value = cfg[id]; $('#' + id)._show(); });
+  ['mode', 'brightness_mode'].forEach(syncSeg);
+  $('#ignore_black_bars').checked = cfg.ignore_black_bars;
+  $('#stop_action').value = cfg.stop_action;
+  syncVisibility();
+}
+$('#ignore_black_bars').onchange = e => save({ignore_black_bars: e.target.checked});
+$('#stop_action').onchange = e => save({stop_action: e.target.value});
+document.querySelectorAll('[data-preset]').forEach(b => b.onclick = async () => {
+  try { cfg = await api('/api/presets/' + b.dataset.preset, {}); renderBulbs(); syncControls(); setStatus(`${b.textContent} preset applied`); }
+  catch (e) { setStatus(e.message, 'err'); }
+});
+function syncVisibility() {
+  const fixed = cfg.brightness_mode === 'fixed';
+  $('#brightness').hidden = $('#fixedLabel').hidden = !fixed;
+  $('#min_brightness').hidden = $('#minLabel').hidden = fixed;
+}
+
+// ---- engine
+$('#toggle').onclick = async () => {
+  try {
+    if (!running && !cfg.bulbs.some(b => b.enabled)) return setStatus('Add and tick at least one bulb first', 'err');
+    applyStatus(await api(running ? '/api/engine/stop' : '/api/engine/start', {}));
+  } catch (e) { setStatus(e.message, 'err'); }
+};
+function applyStatus(s) {
+  lastStatus = s; paintDots();
+  running = s.running;
+  $('#toggle').textContent = running ? 'Stop' : 'Start';
+  $('#toggle').className = running ? 'stop' : 'primary';
+  $('#swatch').style.background = `rgb(${s.color.join(',')})`;
+  if (s.error) setStatus(s.error, 'err');
+  else setStatus(running ? `Syncing · ${s.fps} fps` : 'Idle', running ? 'run' : '');
+}
+function connectWS() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = e => applyStatus(JSON.parse(e.data));
+  ws.onclose = () => setTimeout(connectWS, 1500);
+}
+
+(async function init() {
+  cfg = await api('/api/config');
+  renderBulbs();
+  syncControls();
+  $('#demoTag').hidden = !cfg.demo;
+  connectWS();
+  try { await loadMonitors(); } catch (e) { setStatus(e.message, 'err'); }
+})();
+</script>
+</body>
+</html>

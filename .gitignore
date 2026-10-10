@@ -1,0 +1,15 @@
+# secrets / per-machine state (Tuya local keys and cloud credentials live here)
+config.json
+tinytuya.json
+devices.json
+snapshot.json
+tuya-raw.json
+tuya-raw.json.*
+*.log
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
