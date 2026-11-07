@@ -202,7 +202,7 @@ git add firetv/app/src && git commit -m "feat(firetv): port colour extraction ma
   assertTrue(abs(c.dimming - 60) <= 1)   // 20 + 80 * 128/255 ≈ 60.2
 }
 @Test fun `dead band suppresses tiny changes`() {
-  val p = Pipeline(); val pr = Presets.PARTY.copy(saturation=1f)
+  val p = Pipeline(); val pr = Presets.PARTY.copy(saturation=1f, leadMs=0)
   assertNotNull(p.step(solid(200,100,50), pr, 100)); assertNull(p.step(solid(201,101,51), pr, 100))
 }
 @Test fun `near black keeps last hue and drops dimming`() {
@@ -387,7 +387,7 @@ private fun engine(src: FakeSource, sink: FakeSink, vararg ips: String): Pair<Sy
   src.frame = solid(0,0,200); e.tick(0); src.frame = solid(2,2,2)
   var t = 0L; while (t < 1_600_000_000) { t += 50_000_000; e.tick(t) }
   assertEquals(SyncState.PausedNoPicture, e.state); assertEquals(WARM_WHITE, sink.sent.last().second)
-  src.frame = solid(0,200,0); e.tick(t + 50_000_000); assertTrue(e.state is SyncState.Syncing); assertEquals(200, sink.sent.last().second.g)
+  src.frame = solid(0,200,0); e.tick(t + 50_000_000); assertTrue(e.state is SyncState.Syncing); assertEquals(255, sink.sent.last().second.g); assertEquals(0, sink.sent.last().second.r)   // hue normalised, level goes via dimming
 }
 @Test fun `applyResting sends warm white and applyOff sends state false`() {
   val sink = FakeSink(); val (e, _) = engine(FakeSource(), sink, "1.1.1.1"); e.applyResting(); assertEquals(WARM_WHITE, sink.sent.last().second); e.applyOff(); assertEquals("1.1.1.1" to false, sink.states.last())
