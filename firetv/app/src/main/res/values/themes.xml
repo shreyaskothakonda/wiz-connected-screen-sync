@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="wiz_background">#101418</color>
+    <style name="Theme.WizSync" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/wiz_background</item>
+    </style>
+</resources>
