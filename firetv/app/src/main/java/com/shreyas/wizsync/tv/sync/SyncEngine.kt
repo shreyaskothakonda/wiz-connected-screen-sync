@@ -1,0 +1,202 @@
+package com.shreyas.wizsync.tv.sync
+
+import com.shreyas.wizsync.tv.store.Settings
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.roundToInt
+
+sealed class SyncState {
+    object Ready : SyncState()
+    data class Syncing(val fps: Float, val color: BulbCommand) : SyncState()
+    object PausedNoPicture : SyncState()
+    data class Error(val message: String) : SyncState()
+}
+
+/**
+ * The capture -> colour -> bulbs loop, free of Android APIs. Drive [tick] directly in tests, or [runLoop] in a service.
+ * Port of Engine._loop in app/engine.py, plus black-picture fallback and bulb health checks.
+ */
+class SyncEngine(
+    val source: FrameSource,
+    val sink: BulbSink,
+    val settings: Settings,
+    val clock: () -> Long = System::nanoTime,
+    val sleep: (Long) -> Unit = Thread::sleep,
+) {
+    @Volatile var state: SyncState = SyncState.Ready
+        private set(value) {
+            field = value
+            onState?.invoke(value)
+        }
+    @Volatile var onState: ((SyncState) -> Unit)? = null
+
+    private val unhealthySet: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    val unhealthy: Set<String> = unhealthySet
+
+    /** IPs that must receive no sends (used while identifying a bulb). */
+    val muted: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    private val pipeline = Pipeline(clock)
+    private val lastSentByIp = HashMap<String, BulbCommand>()
+    private var lastPipelineCmd: BulbCommand? = null
+    private var previousEnabled: Set<String> = emptySet()
+
+    private var blackSinceNs = -1L
+    private var fadeStep = 0
+    private val fadeFrom = HashMap<String, BulbCommand>()
+
+    private val sendCounts = HashMap<String, Int>()
+    private val missStreak = HashMap<String, Int>()
+    private val lastPingNs = HashMap<String, Long>()
+
+    private var fpsWindowStartNs = -1L
+    private var framesInWindow = 0
+    private var fps = 0f
+
+    fun runLoop(stop: () -> Boolean) {
+        while (!stop()) {
+            val t0 = clock()
+            tick(t0)
+            val elapsedMs = (clock() - t0) / 1_000_000
+            val periodMs = (1000f / Presets.byId(settings.presetId).rate).toLong()
+            if (periodMs > elapsedMs) sleep(periodMs - elapsedMs)
+        }
+        applyResting()
+        state = SyncState.Ready
+    }
+
+    /** Sends [WARM_WHITE] to every enabled, unmuted bulb. Does not change [state]. */
+    fun applyResting() {
+        for (ip in enabledIps()) if (ip !in muted) sendTo(ip, WARM_WHITE)
+    }
+
+    /** Turns every enabled bulb off, muted or not. Does not change [state]. */
+    fun applyOff() {
+        for (ip in enabledIps()) sink.setState(ip, false)
+    }
+
+    fun tick(nowNs: Long) {
+        val frame = source.latest() ?: return
+        val preset = Presets.byId(settings.presetId)
+        val enabled = enabledIps()
+        restDisabled(enabled)
+        countFrame(nowNs)
+
+        val avgMax = ColorMath.brightnessOf(ColorMath.average(frame)) * 255f
+        if (avgMax < BLACK_BELOW) {
+            if (blackSinceNs < 0) blackSinceNs = nowNs
+            if (state == SyncState.PausedNoPicture) {
+                fadeToResting(enabled)
+                pingWhilePaused(enabled, nowNs)
+                return
+            }
+            if (nowNs - blackSinceNs >= BLACK_HOLD_NS) {
+                enterPaused(enabled, nowNs)
+                return
+            }
+        } else {
+            blackSinceNs = -1L
+        }
+
+        val cmd = pipeline.step(frame, preset, settings.brightnessFor(preset.id))
+        if (cmd != null) lastPipelineCmd = cmd
+        for (ip in enabled) {
+            if (ip in muted) continue
+            val toSend = cmd ?: if (ip !in lastSentByIp) lastPipelineCmd else null
+            if (toSend != null) sendTo(ip, toSend)
+        }
+        val shown = lastPipelineCmd ?: WARM_WHITE
+        val current = state
+        if (current !is SyncState.Syncing || current.fps != fps || current.color != shown) {
+            state = SyncState.Syncing(fps, shown)
+        }
+    }
+
+    private fun enabledIps(): List<String> = settings.enabledBulbs().map { it.ip }
+
+    /** A bulb that was ticked last time and is not now gets one [WARM_WHITE]. */
+    private fun restDisabled(enabled: List<String>) {
+        val now = enabled.toSet()
+        for (ip in previousEnabled - now) {
+            if (ip !in muted) sink.send(ip, WARM_WHITE)
+            lastSentByIp.remove(ip)
+            unhealthySet.remove(ip)
+        }
+        previousEnabled = now
+    }
+
+    private fun countFrame(nowNs: Long) {
+        if (fpsWindowStartNs < 0) fpsWindowStartNs = nowNs
+        framesInWindow++
+        val elapsed = nowNs - fpsWindowStartNs
+        if (elapsed >= ONE_SECOND_NS) {
+            fps = framesInWindow * 1e9f / elapsed
+            framesInWindow = 0
+            fpsWindowStartNs = nowNs
+        }
+    }
+
+    private fun enterPaused(enabled: List<String>, nowNs: Long) {
+        fadeStep = 0
+        fadeFrom.clear()
+        fadeFrom.putAll(lastSentByIp)
+        for (ip in enabled) lastPingNs[ip] = nowNs
+        state = SyncState.PausedNoPicture
+    }
+
+    /** One of [FADE_STEPS] interpolated commands per tick from the last sent colour toward [WARM_WHITE]. */
+    private fun fadeToResting(enabled: List<String>) {
+        if (fadeStep >= FADE_STEPS) return
+        fadeStep++
+        val f = fadeStep.toFloat() / FADE_STEPS
+        for (ip in enabled) {
+            if (ip in muted) continue
+            val from = fadeFrom[ip]
+            sendTo(ip, if (from == null || fadeStep == FADE_STEPS) WARM_WHITE else lerp(from, WARM_WHITE, f))
+        }
+    }
+
+    private fun lerp(a: BulbCommand, b: BulbCommand, f: Float) = BulbCommand(
+        r = (a.r + (b.r - a.r) * f).roundToInt(),
+        g = (a.g + (b.g - a.g) * f).roundToInt(),
+        b = (a.b + (b.b - a.b) * f).roundToInt(),
+        dimming = (a.dimming + (b.dimming - a.dimming) * f).roundToInt(),
+    )
+
+    private fun pingWhilePaused(enabled: List<String>, nowNs: Long) {
+        for (ip in enabled) {
+            if (nowNs - (lastPingNs[ip] ?: nowNs) >= PAUSED_PING_NS) {
+                lastPingNs[ip] = nowNs
+                recordPing(ip)
+            }
+        }
+    }
+
+    private fun sendTo(ip: String, cmd: BulbCommand) {
+        sink.send(ip, cmd)
+        lastSentByIp[ip] = cmd
+        val n = (sendCounts[ip] ?: 0) + 1
+        sendCounts[ip] = n
+        if (n % PING_EVERY_SENDS == 0) recordPing(ip)
+    }
+
+    /** Two consecutive misses mark the bulb unhealthy; any reply clears it. */
+    private fun recordPing(ip: String) {
+        if (sink.ping(ip)) {
+            missStreak[ip] = 0
+            unhealthySet.remove(ip)
+        } else {
+            val misses = (missStreak[ip] ?: 0) + 1
+            missStreak[ip] = misses
+            if (misses >= 2) unhealthySet.add(ip)
+        }
+    }
+
+    private companion object {
+        const val BLACK_BELOW = 8f
+        const val ONE_SECOND_NS = 1_000_000_000L
+        const val BLACK_HOLD_NS = ONE_SECOND_NS
+        const val PAUSED_PING_NS = 3_000_000_000L
+        const val FADE_STEPS = 5
+        const val PING_EVERY_SENDS = 60
+    }
+}
