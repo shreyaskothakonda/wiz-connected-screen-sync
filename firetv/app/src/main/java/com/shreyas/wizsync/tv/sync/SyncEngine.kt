@@ -65,7 +65,7 @@ class SyncEngine(
                 if (periodMs > elapsedMs) sleep(periodMs - elapsedMs)
             }
         } finally {
-            if (!off) applyResting()
+            applyResting()
             state = SyncState.Ready
         }
     }
@@ -73,7 +73,17 @@ class SyncEngine(
     /** Sends [WARM_WHITE] to every enabled, unmuted bulb. Does not change [state]. */
     @Synchronized
     fun applyResting() {
+        if (off) return
         for (ip in enabledIps()) if (ip !in muted) sendTo(ip, WARM_WHITE)
+    }
+
+    /**
+     * Call when something outside the engine has changed this bulb's colour (e.g. Identify) so the next tick
+     * re-sends the sync colour.
+     */
+    @Synchronized
+    fun forget(ip: String) {
+        lastSentByIp.remove(ip)
     }
 
     /** Turns every enabled bulb off, muted or not, and latches: later ticks and the loop's exit send nothing. */

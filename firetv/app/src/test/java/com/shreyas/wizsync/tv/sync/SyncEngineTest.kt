@@ -109,9 +109,12 @@ class SyncEngineTest {
 
     @Test fun `unmuted bulb is brought back to the current colour`() {
         val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1", "1.1.1.2")
-        e.muted += "1.1.1.2"; src.frame = solid(255, 0, 0)
-        for (i in 0..4) e.tick(i * 50_000_000L)
-        assertTrue(sink.sent.none { it.first == "1.1.1.2" })
+        src.frame = solid(255, 0, 0); e.tick(0)
+        assertTrue(sink.sent.any { it.first == "1.1.1.2" })
+        e.muted += "1.1.1.2"; e.forget("1.1.1.2")
+        val before = sink.sent.size
+        for (i in 1..4) e.tick(i * 50_000_000L)
+        assertTrue(sink.sent.drop(before).none { it.first == "1.1.1.2" })
         e.muted -= "1.1.1.2"; e.tick(300_000_000)
         val c = sink.sent.last { it.first == "1.1.1.2" }.second
         assertEquals(255, c.r); assertEquals(0, c.b)
