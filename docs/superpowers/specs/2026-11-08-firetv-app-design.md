@@ -281,3 +281,12 @@ the same moment averaged `r=34 g=27 b=24`, matching the spike. Over ~60 s: 115 f
 - Builder environment note: the Mac has the Android SDK at `~/Library/Android/sdk` with
   platform-tools (adb not on PATH) and only JDK 26 on PATH; the Gradle build must pin a JDK 17 or
   21 toolchain.
+
+## Owner rulings after the first live run (2026-11-08)
+
+- **Fifth preset, "Instant".** The owner asked for the sync to feel instant. Add `Presets.INSTANT`
+  (`id="instant"`, label "Instant", mode AVERAGE, smoothing 0, saturation 1.3, FOLLOW with min
+  brightness 15, lead 0 ms, rate 30 Hz, ignoreBlackBars true) as the first chip on the main screen,
+  and make it the default preset for a fresh install. The remaining latency is the bulb's own
+  internal fade, which WiZ firmware controls.
+- The four original presets stay as the "colour modes" the owner can pick between.
