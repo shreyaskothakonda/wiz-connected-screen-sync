@@ -1,6 +1,8 @@
-# WiZ Sync for Fire TV
+# Screen Sync for WiZ lights (Fire TV)
 
-Makes Philips WiZ bulbs follow whatever is on your Fire TV screen. The app captures the screen on the Stick, picks a colour, and sends it straight to the bulbs over your LAN. No cloud, no phone, no PC.
+Makes Philips WiZ bulbs follow whatever is on your Fire TV screen. The app captures the screen on the Stick, picks a colour, and sends it straight to the bulbs over your LAN. No cloud, no phone, no PC. The store name is **Screen Sync for WiZ lights**; the in-app title is still **WiZ Sync**.
+
+This is an independent project. It is not affiliated with, endorsed by or supported by Signify or WiZ. WiZ is a trademark of Signify Holding B.V., used only to state which bulbs the app works with.
 
 Tested on a Fire TV Stick 4K Max (Fire OS 7.7.1.3).
 
@@ -36,7 +38,24 @@ cd firetv && ./gradlew assembleDebug
 ~/Library/Android/sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Run the unit tests with `./gradlew test`. Then launch **WiZ Sync** from Your Apps & Channels.
+Run the unit tests with `./gradlew test`. Then launch **Screen Sync for WiZ lights** from Your Apps & Channels.
+
+## Release build and signing
+
+Release builds are minified with R8 (`app/proguard-rules.pro`), which also strips `Log.i`/`Log.d` output, and are signed with a keystore that stays out of git:
+
+```bash
+source firetv/jdk.sh
+cd firetv
+keytool -genkeypair -v -keystore release.jks -alias screensync -keyalg RSA -keysize 2048 -validity 10000
+cp keystore.properties.example keystore.properties   # then fill in the passwords
+./gradlew assembleRelease
+~/Library/Android/sdk/platform-tools/adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+`release.jks`, `keystore.properties` and `*.keystore` are git-ignored. Without `keystore.properties` the release build still succeeds but produces `app-release-unsigned.apk`. Back the keystore up: Amazon re-signs the store build with its own certificate, but sideloaded updates over an already installed build must be signed by the same key, and a store build cannot be updated over a sideloaded one (uninstall first).
+
+Appstore preparation lives in `docs/`: `appstore-checklist.md` (requirements with sources), `store-listing.md` (listing text, privacy policy, content rating answers) and `store/` (icons, icon generator, screenshot script).
 
 ## Using it
 
