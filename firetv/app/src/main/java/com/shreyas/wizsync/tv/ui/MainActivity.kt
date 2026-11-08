@@ -128,7 +128,10 @@ class MainActivity : AppCompatActivity() {
     private fun render() {
         ui.status.text = notice ?: vm.statusText(state)
         ui.startStop.text = vm.startLabel(state)
-        ui.startStop.alpha = if (vm.canStart || running) 1f else DIMMED
+        val startEnabled = vm.canStart || running
+        ui.startStop.isEnabled = startEnabled
+        ui.startStop.alpha = if (startEnabled) 1f else DIMMED
+        if (!startEnabled && ui.startStop.hasFocus()) ui.findBulbs.requestFocus()
         val color = (state as? SyncState.Syncing)?.color
         val argb = if (color != null) {
             0xFF000000.toInt() or (color.r shl 16) or (color.g shl 8) or color.b
