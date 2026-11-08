@@ -18,6 +18,10 @@ class BulbAdapter(
     private val onMenu: (Bulb) -> Unit,
 ) : RecyclerView.Adapter<BulbAdapter.Holder>() {
 
+    init {
+        setHasStableIds(true)
+    }
+
     private val items = mutableListOf<Bulb>()
     private var unhealthy: Set<String> = emptySet()
 
@@ -36,6 +40,8 @@ class BulbAdapter(
     }
 
     override fun getItemCount(): Int = items.size
+
+    override fun getItemId(position: Int): Long = items[position].mac.lowercase().hashCode().toLong()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder =
         Holder(ItemBulbBinding.inflate(LayoutInflater.from(parent.context), parent, false))
@@ -77,6 +83,9 @@ class BulbAdapter(
         }
 
         fun bind(bulb: Bulb) {
+            val s = if (b.root.hasFocus()) FOCUS_SCALE else 1f
+            b.root.scaleX = s
+            b.root.scaleY = s
             b.name.text = bulb.name
             b.ip.text = bulb.ip
             bindTick(bulb)

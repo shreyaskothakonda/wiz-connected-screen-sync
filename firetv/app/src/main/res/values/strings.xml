@@ -16,11 +16,12 @@
     <string name="preset_desc_instant">Average colour, no smoothing, 30 updates a second</string>
     <string name="preset_desc_movie">Smoothed average colour, follows brightness</string>
     <string name="preset_desc_gaming">Dominant colour, fast</string>
-    <string name="preset_desc_ambient">Brightest colour at a fixed level</string>
+    <string name="preset_desc_ambient">Slow, steady average colour at a fixed level</string>
     <string name="preset_desc_party">Most saturated colour, maximum punch</string>
 
     <string name="status_capture_needed">Capture permission needed</string>
     <string name="status_searching">Searching for bulbs…</string>
+    <string name="status_search_failed">Search failed. Check Wi-Fi.</string>
     <string name="status_no_bulbs_found">No bulbs found. Enable local communication in the WiZ app.</string>
     <plurals name="status_found_bulbs">
         <item quantity="one">Found %d bulb</item>

@@ -24,6 +24,7 @@ import com.shreyas.wizsync.tv.databinding.ActivityMainBinding
 import com.shreyas.wizsync.tv.sync.Presets
 import com.shreyas.wizsync.tv.sync.SyncService
 import com.shreyas.wizsync.tv.sync.SyncState
+import com.shreyas.wizsync.tv.wiz.Discovered
 
 class MainActivity : AppCompatActivity() {
 
@@ -66,14 +67,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Once a second while visible: notice a session that ended on its own and refresh the warning badges. */
+    /** Once a second while visible: refresh the warning badges (unhealthy bulbs change independently of state events). */
     private val poll = object : Runnable {
         override fun run() {
-            val engine = binder?.engine
-            if (engine == null && running) {
-                listener(SyncState.Ready)
-            }
-            adapter.setUnhealthy(engine?.unhealthy ?: emptySet())
+            adapter.setUnhealthy(binder?.engine?.unhealthy ?: emptySet())
             main.postDelayed(this, POLL_MS)
         }
     }
@@ -144,17 +141,10 @@ class MainActivity : AppCompatActivity() {
     private fun renderPreset() {
         val preset = Presets.byId(App.settings.presetId)
         for (i in 0 until ui.presetRow.childCount) {
-            ui.presetRow.getChildAt(i).isSelected = Presets.ALL[i].id == preset.id
+            val chip = ui.presetRow.getChildAt(i)
+            chip.isSelected = chip.tag == preset.id
         }
-        ui.presetDesc.setText(
-            when (preset.id) {
-                Presets.INSTANT.id -> R.string.preset_desc_instant
-                Presets.MOVIE.id -> R.string.preset_desc_movie
-                Presets.GAMING.id -> R.string.preset_desc_gaming
-                Presets.AMBIENT.id -> R.string.preset_desc_ambient
-                else -> R.string.preset_desc_party
-            },
-        )
+        ui.presetDesc.setText(descriptionFor(preset.id))
         ui.brightnessTitle.text = vm.brightnessTitle()
         ui.brightnessValue.text = getString(R.string.percent_format, vm.brightnessPercent())
         ui.brightnessFill.pivotX = 0f
@@ -174,10 +164,20 @@ class MainActivity : AppCompatActivity() {
         (if (vm.canStart) ui.startStop else ui.findBulbs).requestFocus()
     }
 
+    private fun descriptionFor(id: String): Int = when (id) {
+        Presets.INSTANT.id -> R.string.preset_desc_instant
+        Presets.MOVIE.id -> R.string.preset_desc_movie
+        Presets.GAMING.id -> R.string.preset_desc_gaming
+        Presets.AMBIENT.id -> R.string.preset_desc_ambient
+        Presets.PARTY.id -> R.string.preset_desc_party
+        else -> throw IllegalArgumentException("No description for preset $id")
+    }
+
     private fun buildPresetChips() {
         for (preset in Presets.ALL) {
             val chip = LayoutInflater.from(this).inflate(R.layout.item_chip, ui.presetRow, false) as TextView
             chip.text = preset.label
+            chip.tag = preset.id
             chip.setOnClickListener {
                 App.settings.setPreset(preset.id)
                 renderPreset()
@@ -191,7 +191,6 @@ class MainActivity : AppCompatActivity() {
     private fun onStartStop() {
         if (running) {
             SyncService.stop(this)
-            listener(SyncState.Ready)
         } else if (vm.canStart) {
             val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             @Suppress("DEPRECATION")
@@ -224,18 +223,20 @@ class MainActivity : AppCompatActivity() {
         Thread({
             val wifi = app.getSystemService(Context.WIFI_SERVICE) as WifiManager
             val lock = wifi.createMulticastLock("wizsync")
-            val found = try {
+            val found: List<Discovered>? = try {
                 lock.acquire()
                 App.wiz.discover().also { App.settings.upsertFromDiscovery(it) }
             } catch (_: Exception) {
-                emptyList()
+                null
             } finally {
                 if (lock.isHeld) lock.release()
             }
             runOnUiThread {
                 discovering = false
                 if (isDestroyed) return@runOnUiThread
-                notice = if (found.isEmpty()) {
+                notice = if (found == null) {
+                    getString(R.string.status_search_failed)
+                } else if (found.isEmpty()) {
                     getString(R.string.status_no_bulbs_found)
                 } else {
                     resources.getQuantityString(R.plurals.status_found_bulbs, found.size, found.size)

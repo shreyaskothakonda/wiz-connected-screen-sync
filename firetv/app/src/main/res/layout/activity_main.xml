@@ -1,21 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:clipChildren="false"
     android:clipToPadding="false"
-    android:fillViewport="true"
-    android:paddingStart="72dp"
-    android:paddingTop="48dp"
-    android:paddingEnd="72dp"
-    android:paddingBottom="48dp"
-    android:scrollbars="none">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:clipChildren="false"
-        android:orientation="vertical">
+    android:orientation="vertical"
+    android:paddingStart="@dimen/screen_pad_h"
+    android:paddingTop="@dimen/screen_pad_v"
+    android:paddingEnd="@dimen/screen_pad_h"
+    android:paddingBottom="@dimen/screen_pad_v">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -24,18 +17,18 @@
             android:orientation="horizontal">
 
             <ImageView
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="@dimen/logo_size"
+                android:layout_height="@dimen/logo_size"
                 android:importantForAccessibility="no"
                 android:src="@drawable/ic_bulb" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
+                android:layout_marginStart="8dp"
                 android:text="@string/app_name"
                 android:textColor="@color/wiz_text"
-                android:textSize="44sp"
+                android:textSize="@dimen/text_title"
                 android:textStyle="bold" />
 
             <View
@@ -45,23 +38,23 @@
 
             <View
                 android:id="@+id/swatch"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="@dimen/swatch_size"
+                android:layout_height="@dimen/swatch_size"
                 android:background="@drawable/swatch_bg" />
 
             <TextView
                 android:id="@+id/status"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="14dp"
+                android:layout_marginStart="7dp"
                 android:textColor="@color/wiz_text"
-                android:textSize="26sp" />
+                android:textSize="@dimen/text_l" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="12dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -74,7 +67,7 @@
             <TextView
                 android:id="@+id/findBulbs"
                 style="@style/Chip"
-                android:layout_marginStart="28dp"
+                android:layout_marginStart="14dp"
                 android:text="@string/find_bulbs" />
         </LinearLayout>
 
@@ -90,51 +83,51 @@
                 android:layout_height="wrap_content"
                 android:clipChildren="false"
                 android:clipToPadding="false"
-                android:paddingTop="6dp"
-                android:paddingBottom="6dp" />
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp" />
 
             <TextView
                 android:id="@+id/noBulbs"
                 android:layout_width="match_parent"
-                android:layout_height="160dp"
+                android:layout_height="80dp"
                 android:gravity="center_vertical"
                 android:text="@string/no_bulbs_hint"
                 android:textColor="@color/wiz_text_muted"
-                android:textSize="22sp" />
+                android:textSize="@dimen/text_notice" />
         </FrameLayout>
 
         <TextView
             style="@style/SectionLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="6dp"
             android:text="@string/section_preset" />
 
         <LinearLayout
             android:id="@+id/presetRow"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="6dp"
             android:orientation="horizontal" />
 
         <TextView
             android:id="@+id/presetDesc"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="6dp"
             android:singleLine="true"
             android:textColor="@color/wiz_text_muted"
-            android:textSize="20sp" />
+            android:textSize="@dimen/text_s" />
 
         <LinearLayout
             android:id="@+id/brightnessRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="10dp"
             android:background="@drawable/brightness_row_bg"
             android:focusable="true"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="8dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -147,21 +140,21 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:textColor="@color/wiz_text"
-                    android:textSize="24sp" />
+                    android:textSize="@dimen/text_m" />
 
                 <TextView
                     android:id="@+id/brightnessValue"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/wiz_text"
-                    android:textSize="24sp"
+                    android:textSize="@dimen/text_m"
                     android:textStyle="bold" />
             </LinearLayout>
 
             <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="14dp"
-                android:layout_marginTop="12dp"
+                android:layout_height="@dimen/track_height"
+                android:layout_marginTop="6dp"
                 android:background="@drawable/track_bg">
 
                 <View
@@ -174,31 +167,30 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="5dp"
                 android:text="@string/brightness_hint"
                 android:textColor="@color/wiz_text_dim"
-                android:textSize="18sp" />
+                android:textSize="@dimen/text_s" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/startStop"
-            android:layout_width="320dp"
-            android:layout_height="64dp"
-            android:layout_marginTop="24dp"
+            android:layout_width="@dimen/btn_width"
+            android:layout_height="@dimen/btn_height"
+            android:layout_marginTop="12dp"
             android:background="@drawable/btn_primary_bg"
             android:clickable="true"
             android:focusable="true"
             android:gravity="center"
             android:textColor="@color/chip_text_selected"
-            android:textSize="26sp"
+            android:textSize="@dimen/text_l"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="8dp"
             android:text="@string/consent_note"
             android:textColor="@color/wiz_text_dim"
-            android:textSize="18sp" />
-    </LinearLayout>
-</ScrollView>
+            android:textSize="@dimen/text_s" />
+</LinearLayout>

@@ -7,13 +7,13 @@
     <!-- Pill used for the preset chips and the Find bulbs button. -->
     <style name="Chip">
         <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">60dp</item>
+        <item name="android:layout_height">@dimen/chip_height</item>
         <item name="android:gravity">center</item>
-        <item name="android:paddingStart">30dp</item>
-        <item name="android:paddingEnd">30dp</item>
+        <item name="android:paddingStart">@dimen/chip_pad_h</item>
+        <item name="android:paddingEnd">@dimen/chip_pad_h</item>
         <item name="android:background">@drawable/chip_bg</item>
         <item name="android:textColor">@color/chip_text</item>
-        <item name="android:textSize">24sp</item>
+        <item name="android:textSize">@dimen/text_m</item>
         <item name="android:textStyle">bold</item>
         <item name="android:focusable">true</item>
         <item name="android:clickable">true</item>
@@ -22,7 +22,7 @@
 
     <style name="SectionLabel">
         <item name="android:textColor">@color/wiz_text_secondary</item>
-        <item name="android:textSize">26sp</item>
+        <item name="android:textSize">@dimen/text_l</item>
         <item name="android:textAllCaps">true</item>
         <item name="android:letterSpacing">0.1</item>
     </style>
