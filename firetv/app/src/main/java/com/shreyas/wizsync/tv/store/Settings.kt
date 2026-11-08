@@ -13,6 +13,9 @@ data class Bulb(val mac: String, val ip: String, val name: String, val enabled: 
  * User settings: the bulbs, the selected preset and per-preset brightness.
  * Everything is held in memory, loaded once from [store] on construction, and written back
  * as one JSON document under [KEY] after every mutation.
+ *
+ * Thread safety: all methods are thread-safe (synchronised on this instance). `bulbs` and
+ * `enabledBulbs()` return immutable snapshots that are not affected by later mutations.
  */
 class Settings(private val store: KeyValueStore) {
     private var bulbState: List<Bulb> = emptyList()
@@ -24,19 +27,24 @@ class Settings(private val store: KeyValueStore) {
     }
 
     /** Immutable snapshot of all known bulbs, in insertion order. */
+    @get:Synchronized
     val bulbs: List<Bulb> get() = bulbState
 
+    @get:Synchronized
     val presetId: String get() = selectedPreset
 
+    @Synchronized
     fun brightnessFor(presetId: String): Int =
         brightnessByPreset[presetId] ?: Presets.byId(presetId).defaultBrightness
 
+    @Synchronized
     fun setBrightness(presetId: String, value: Int) {
         Presets.byId(presetId)
         brightnessByPreset[presetId] = value.coerceIn(MIN_BRIGHTNESS, MAX_BRIGHTNESS)
         save()
     }
 
+    @Synchronized
     fun setPreset(id: String) {
         Presets.byId(id)
         selectedPreset = id
@@ -44,6 +52,7 @@ class Settings(private val store: KeyValueStore) {
     }
 
     /** Adds unknown bulbs (enabled, default name) and refreshes the IP of known ones. Never removes. */
+    @Synchronized
     fun upsertFromDiscovery(found: List<Discovered>) {
         val updated = bulbState.toMutableList()
         for (d in found) {
@@ -58,18 +67,23 @@ class Settings(private val store: KeyValueStore) {
         save()
     }
 
+    @Synchronized
     fun setEnabled(mac: String, enabled: Boolean) = mutateBulb(mac) { it.copy(enabled = enabled) }
 
+    @Synchronized
     fun rename(mac: String, name: String) = mutateBulb(mac) { it.copy(name = name) }
 
+    @Synchronized
     fun updateIp(mac: String, ip: String) = mutateBulb(mac) { it.copy(ip = ip) }
 
+    @Synchronized
     fun remove(mac: String) {
         val before = bulbState.size
         bulbState = bulbState.filterNot { it.mac.equals(mac, ignoreCase = true) }
         if (bulbState.size != before) save()
     }
 
+    @Synchronized
     fun enabledBulbs(): List<Bulb> = bulbState.filter { it.enabled }
 
     private fun mutateBulb(mac: String, transform: (Bulb) -> Bulb) {
@@ -113,9 +127,14 @@ class Settings(private val store: KeyValueStore) {
         root.optString("preset", "").takeIf { id -> Presets.ALL.any { it.id == id } }
             ?.let { selectedPreset = it }
 
+        // Keep only integer brightness values for known presets, clamped to the valid range.
+        // Anything else (strings, decimals, nulls) is skipped so the preset default applies.
         root.optJSONObject("brightness")?.let { b ->
             b.keys().forEach { key ->
-                if (Presets.ALL.any { it.id == key }) brightnessByPreset[key] = b.optInt(key)
+                val value = b.opt(key)
+                if (Presets.ALL.any { it.id == key } && value is Int) {
+                    brightnessByPreset[key] = value.coerceIn(MIN_BRIGHTNESS, MAX_BRIGHTNESS)
+                }
             }
         }
 
@@ -125,10 +144,14 @@ class Settings(private val store: KeyValueStore) {
                 val o = arr.optJSONObject(i) ?: continue
                 val mac = o.optString("mac", "")
                 if (mac.isEmpty()) continue
+                // Drop duplicates by MAC (case-insensitive), keeping the first occurrence.
+                if (loaded.any { it.mac.equals(mac, ignoreCase = true) }) continue
+                // A missing, blank or JSON-null name falls back to the default name.
+                val rawName = if (o.isNull("name")) "" else o.optString("name", "")
                 loaded += Bulb(
                     mac = mac,
                     ip = o.optString("ip", ""),
-                    name = o.optString("name", defaultName(mac)),
+                    name = rawName.ifBlank { defaultName(mac) },
                     enabled = o.optBoolean("enabled", true),
                 )
             }

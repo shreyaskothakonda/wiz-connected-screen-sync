@@ -61,4 +61,30 @@ class SettingsTest {
         s.remove("aa")
         assertEquals(1, s.bulbs.size)
     }
+
+    @Test fun `stored brightness is validated on load`() {
+        val m = MapStore()
+        m.put("settings", """{"preset":"movie","brightness":{"movie":"x","party":500,"ambient":3},"bulbs":[]}""")
+        val s = Settings(m)
+        assertEquals(15, s.brightnessFor("movie"))
+        assertEquals(100, s.brightnessFor("party"))
+        assertEquals(10, s.brightnessFor("ambient"))
+    }
+
+    @Test fun `load defaults blank or null names and drops duplicate macs`() {
+        val m = MapStore()
+        m.put(
+            "settings",
+            """{"preset":"movie","brightness":{},"bulbs":[""" +
+                """{"mac":"aa","ip":"1.1.1.1","name":"  ","enabled":true},""" +
+                """{"mac":"bb","ip":"1.1.1.2","name":null,"enabled":true},""" +
+                """{"mac":"AA","ip":"9.9.9.9","name":"Dup","enabled":false}]}""",
+        )
+        val bulbs = Settings(m).bulbs
+        assertEquals(2, bulbs.size)
+        assertEquals("WiZ AA", bulbs[0].name)
+        assertEquals("1.1.1.1", bulbs[0].ip)
+        assertTrue(bulbs[0].enabled)
+        assertEquals("WiZ BB", bulbs[1].name)
+    }
 }
