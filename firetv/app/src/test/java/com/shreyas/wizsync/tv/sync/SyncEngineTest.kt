@@ -133,6 +133,18 @@ class SyncEngineTest {
         assertTrue(sink.sent.isEmpty())
     }
 
+    @Test fun `restore after the loop has ended sends warm white`() {
+        val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1")
+        src.frame = solid(255, 0, 0)
+        e.muted += "1.1.1.1"                       // Identify in progress: resting on exit skips this bulb
+        var n = 0
+        e.runLoop(stop = { ++n > 2 })
+        assertEquals(SyncState.Ready, e.state)
+        e.muted -= "1.1.1.1"
+        e.restore("1.1.1.1")
+        assertEquals(WARM_WHITE, sink.sent.last().second)
+    }
+
     @Test fun `runLoop publishes Syncing on entry`() {
         val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1")
         val seen = mutableListOf<SyncState>()

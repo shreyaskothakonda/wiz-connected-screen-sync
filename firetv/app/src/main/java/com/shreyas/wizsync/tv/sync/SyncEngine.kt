@@ -91,13 +91,14 @@ class SyncEngine(
 
     /**
      * Hands a bulb back after something outside the engine (Identify) changed its colour: off if the engine has
-     * latched off, warm white when there is no sync colour to return to, otherwise the next tick re-sends the sync colour.
+     * latched off, warm white when no sync colour will follow (not syncing, bulb unticked, nothing sent yet), otherwise the
+     * next tick re-sends the sync colour.
      */
     @Synchronized
     fun restore(ip: String) {
         when {
             off -> sink.setState(ip, false)
-            state == SyncState.PausedNoPicture || ip !in enabledIps() || lastPipelineCmd == null ->
+            state !is SyncState.Syncing || ip !in enabledIps() || lastPipelineCmd == null ->
                 sendTo(ip, WARM_WHITE)
             else -> forget(ip)
         }
