@@ -236,6 +236,14 @@ second) and run it with a YouTube music video in front. Any of the three failing
 project for a scope rethink; the UI, pipeline and persistence work waits on this result. The
 spike code is discarded, not kept.
 
+**Result (2026-11-08, Fire TV Stick 4K Max, Fire OS 7.7.1.3): PASS.** All three held. The consent
+dialog appeared and was accepted with the D-pad; YouTube video captured with real colour. Three
+sample lines from `adb logcat -s WIZSPIKE` during a YouTube music video (dark scene, red hats):
+`avg r=53 g=46 b=45`, `avg r=35 g=30 b=30`, `avg r=52 g=35 b=33`. A system `screencap` taken at
+the same moment averaged `r=34 g=27 b=24`, matching the spike. Over ~60 s: 115 frame lines and
+240 "no frame" lines (the sampler polls faster than new frames arrive; expected). Brief
+`r=0 g=0 b=0` / `r=1 g=1 b=1` lines coincided with scene cuts and the YouTube overlay.
+
 ## Testing
 
 - Unit tests for the colour pipeline with hand-built frames: solid colour, letterboxed colour,
