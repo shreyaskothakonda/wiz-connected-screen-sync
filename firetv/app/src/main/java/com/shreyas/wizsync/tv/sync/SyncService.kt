@@ -25,39 +25,43 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Foreground service that owns the projection, frame source and [SyncEngine] while syncing. */
 class SyncService : Service() {
 
+    /** Everything that lives for one Start..Stop; the service may run several in a row. */
+    private class Session(val projection: MediaProjection) {
+        @Volatile var source: ProjectionFrameSource? = null
+        @Volatile var sink: WizSink? = null
+        @Volatile var engine: SyncEngine? = null
+        @Volatile var loopThread: Thread? = null
+        @Volatile var stopping = false
+        @Volatile var receiverRegistered = false
+        val shuttingDown = AtomicBoolean(false)
+        val released = AtomicBoolean(false)
+    }
+
     private val main = Handler(Looper.getMainLooper())
     private val listeners = CopyOnWriteArrayList<(SyncState) -> Unit>()
-    private val shuttingDown = AtomicBoolean(false)
-    private val released = AtomicBoolean(false)
 
-    @Volatile private var stopping = false
-    @Volatile private var engine: SyncEngine? = null
-    @Volatile private var projection: MediaProjection? = null
-    @Volatile private var source: ProjectionFrameSource? = null
-    @Volatile private var sink: WizSink? = null
-    @Volatile private var loopThread: Thread? = null
-    @Volatile private var receiverRegistered = false
+    @Volatile private var session: Session? = null
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
             Log.i(TAG, "projection stopped by system")
-            shutDown { it.applyResting() }
+            session?.let { s -> shutDown(s) { it.applyResting() } }
         }
     }
 
     private val screenOff = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             Log.i(TAG, "screen off")
-            shutDown { it.applyOff() }
+            session?.let { s -> shutDown(s) { it.applyOff() } }
         }
     }
 
     inner class LocalBinder : Binder() {
-        val engine: SyncEngine? get() = this@SyncService.engine
+        val engine: SyncEngine? get() = session?.takeIf { !it.released.get() }?.engine
 
         fun addListener(l: (SyncState) -> Unit) {
             listeners.add(l)
-            l(this@SyncService.engine?.state ?: SyncState.Ready)
+            l(engine?.state ?: SyncState.Ready)
         }
 
         fun removeListener(l: (SyncState) -> Unit) {
@@ -73,95 +77,99 @@ class SyncService : Service() {
             ACTION_START -> handleStart(intent)
             ACTION_STOP -> {
                 Log.i(TAG, "stop requested")
-                shutDown(null)
+                val s = session
+                if (s != null) shutDown(s, null) else leave()
             }
-            else -> if (engine == null) stopSelf()
+            else -> if (session == null) leave()
         }
         return START_NOT_STICKY
     }
 
+    @Suppress("DEPRECATION") // stopForeground(Boolean) is deprecated only on API 33+
+    private fun leave() {
+        stopForeground(true)
+        stopSelf()
+    }
+
     private fun handleStart(intent: Intent) {
-        if (engine != null) return // duplicate start
-        val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
-        @Suppress("DEPRECATION")
-        val data: Intent? = intent.getParcelableExtra(EXTRA_DATA)
-        val mp = data?.let {
-            val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            mpm.getMediaProjection(resultCode, it)
-        }
-        if (mp == null) {
-            Log.w(TAG, "no projection available, stopping")
-            stopSelf()
+        val existing = session
+        if (existing != null) {
+            Log.w(TAG, "start ignored: session already " +
+                if (existing.shuttingDown.get()) "shutting down" else "running")
             return
         }
-        projection = mp
+        var s: Session? = null
         try {
+            val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
+            @Suppress("DEPRECATION")
+            val data: Intent = intent.getParcelableExtra(EXTRA_DATA) ?: error("no projection data")
+            val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            val mp = mpm.getMediaProjection(resultCode, data) ?: error("getMediaProjection returned null")
+            val cur = Session(mp)
+            s = cur
+            session = cur
             val src = ProjectionFrameSource(mp, projectionCallback)
-            source = src
+            cur.source = src
             val snk = WizSink(App.wiz)
-            sink = snk
+            cur.sink = snk
             val eng = SyncEngine(src, snk, App.settings)
-            eng.onState = { s -> main.post { listeners.forEach { it(s) } } }
-            engine = eng
+            eng.onState = { st -> main.post { listeners.forEach { it(st) } } }
+            cur.engine = eng
             registerReceiver(screenOff, IntentFilter(Intent.ACTION_SCREEN_OFF))
-            receiverRegistered = true
-            stopping = false
-            loopThread = Thread({
+            cur.receiverRegistered = true
+            cur.loopThread = Thread({
                 Log.i(TAG, "loop started")
                 try {
-                    eng.runLoop { stopping }
+                    eng.runLoop { cur.stopping }
                 } finally {
                     Log.i(TAG, "loop stopped")
                 }
             }, "wizsync-loop").also { it.start() }
         } catch (e: Exception) {
             Log.e(TAG, "failed to start sync", e)
-            release()
-            stopSelf()
+            s?.let { release(it) }
+            val msg = e.message ?: e.javaClass.simpleName
+            listeners.forEach { it(SyncState.Error(msg)) }
+            leave()
         }
     }
 
     /**
-     * Single exit path: on a background thread run [before] (if any), signal the loop to stop (its exit rests the
-     * bulbs unless [before] latched them off), join it, release everything and stop the service. Runs once.
+     * Single exit path for [s]: on a background thread run [before] (if any), signal the loop to stop (its exit
+     * rests the bulbs unless [before] latched them off), join it, release everything and stop the service.
      */
-    private fun shutDown(before: ((SyncEngine) -> Unit)?) {
-        if (!shuttingDown.compareAndSet(false, true)) return
-        val eng = engine
+    private fun shutDown(s: Session, before: ((SyncEngine) -> Unit)?) {
+        if (!s.shuttingDown.compareAndSet(false, true)) return
         Thread({
             try {
-                if (eng != null) before?.invoke(eng)
-                stopping = true
-                loopThread?.join()
+                s.engine?.let { e -> before?.invoke(e) }
+                s.stopping = true
+                s.loopThread?.join()
             } catch (e: Exception) {
                 Log.w(TAG, "shutdown", e)
             } finally {
-                release()
-                main.post { stopSelf() }
+                release(s)
+                main.post { if (session == null) leave() }
             }
         }, "wizsync-shutdown").start()
     }
 
-    /** Releases every resource exactly once; safe from any thread. */
-    private fun release() {
-        if (!released.compareAndSet(false, true)) return
-        stopping = true
-        if (receiverRegistered) {
-            receiverRegistered = false
+    /** Releases every resource of [s] exactly once; safe from any thread. */
+    private fun release(s: Session) {
+        if (!s.released.compareAndSet(false, true)) return
+        s.stopping = true
+        if (s.receiverRegistered) {
+            s.receiverRegistered = false
             try { unregisterReceiver(screenOff) } catch (_: IllegalArgumentException) {}
         }
-        try { source?.close() } catch (e: Exception) { Log.w(TAG, "source.close", e) }
-        source = null
-        try { projection?.stop() } catch (e: Exception) { Log.w(TAG, "projection.stop", e) }
-        projection = null
-        sink?.shutdown()
-        sink = null
-        engine = null
+        try { s.source?.close() } catch (e: Exception) { Log.w(TAG, "source.close", e) }
+        try { s.projection.stop() } catch (e: Exception) { Log.w(TAG, "projection.stop", e) }
+        s.sink?.shutdown()
+        if (session === s) session = null
     }
 
     override fun onDestroy() {
-        stopping = true
-        release()
+        session?.let { it.stopping = true; release(it) }
         main.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
@@ -171,7 +179,7 @@ class SyncService : Service() {
         if (Build.VERSION.SDK_INT >= 26) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "WiZ Sync", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL_ID, getString(R.string.notification_channel_name), NotificationManager.IMPORTANCE_LOW)
             )
             return Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle(getString(R.string.app_name))

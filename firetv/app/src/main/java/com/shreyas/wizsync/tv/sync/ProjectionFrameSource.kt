@@ -28,20 +28,22 @@ class ProjectionFrameSource(
 
     private val thread = HandlerThread("wizsync-capture").also { it.start() }
     private val reader: ImageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-    private val display: VirtualDisplay?
+    private var display: VirtualDisplay? = null
     private var closed = false
 
     init {
-        reader.setOnImageAvailableListener({ r -> onImage(r) }, Handler(thread.looper))
-        projection.registerCallback(callback, Handler(Looper.getMainLooper()))
-        display = projection.createVirtualDisplay(
-            "wizsync", width, height, 160,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            reader.surface, null, null,
-        )
-        if (display == null) {
+        try {
+            reader.setOnImageAvailableListener({ r -> onImage(r) }, Handler(thread.looper))
+            projection.registerCallback(callback, Handler(Looper.getMainLooper()))
+            display = projection.createVirtualDisplay(
+                "wizsync", width, height, 160,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                reader.surface, null, null,
+            )
+            if (display == null) throw IllegalStateException("createVirtualDisplay returned null")
+        } catch (t: Throwable) {
             close()
-            throw IllegalStateException("createVirtualDisplay returned null")
+            throw t
         }
     }
 
