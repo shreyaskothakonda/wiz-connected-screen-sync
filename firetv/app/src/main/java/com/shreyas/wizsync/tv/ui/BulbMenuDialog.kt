@@ -9,7 +9,6 @@ import com.shreyas.wizsync.tv.R
 import com.shreyas.wizsync.tv.store.Bulb
 import com.shreyas.wizsync.tv.store.Settings
 import com.shreyas.wizsync.tv.sync.SyncEngine
-import com.shreyas.wizsync.tv.sync.SyncState
 import com.shreyas.wizsync.tv.sync.WARM_WHITE
 
 /** Rename / Identify / Remove actions for one bulb. [engine] is the live engine while syncing, else null. */
@@ -69,13 +68,8 @@ class BulbMenuDialog(
             try {
                 eng?.muted?.add(bulb.ip)
                 App.wiz.identify(bulb.ip)
-                if (eng != null && eng.state !is SyncState.Ready) {
-                    // Forget the last sent colour so the next tick resends the sync colour.
-                    eng.forget(bulb.ip)
-                } else {
-                    // Idle, or the session ended mid-blink (resting skipped this muted bulb).
-                    App.wiz.send(bulb.ip, WARM_WHITE)
-                }
+                // The engine decides: off, warm white, or the sync colour on its next tick.
+                if (eng != null) eng.restore(bulb.ip) else App.wiz.send(bulb.ip, WARM_WHITE)
             } catch (_: Exception) {
                 // A bulb that does not answer simply does not blink.
             } finally {

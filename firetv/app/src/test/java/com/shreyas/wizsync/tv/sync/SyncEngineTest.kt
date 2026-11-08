@@ -56,15 +56,91 @@ class SyncEngineTest {
         assertEquals(0, sink.sent.last().second.r) // hue normalised, level goes via dimming
     }
 
-    @Test fun `fade takes five steps and then sends nothing more`() {
+    @Test fun `fade progresses over half a second towards warm white then sends nothing`() {
         val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1")
         src.frame = solid(0, 0, 200); e.tick(0); src.frame = solid(1, 1, 1)
         var t = 0L
-        while (e.state !is SyncState.PausedNoPicture) { t += 50_000_000; e.tick(t) }
+        val step = 33_000_000L
+        while (e.state !is SyncState.PausedNoPicture) { t += step; e.tick(t) }
+        val pausedAt = t
         val before = sink.sent.size
-        repeat(10) { t += 50_000_000; e.tick(t) }
-        assertEquals(5, sink.sent.size - before)
-        assertEquals(WARM_WHITE, sink.sent.last().second)
+        while (t < pausedAt + 500_000_000L) { t += step; e.tick(t) }
+        val fade = sink.sent.drop(before).map { it.second }
+        assertTrue(fade.size > 5)
+        assertTrue(fade.size <= 16) // at most one per tick over ~15 ticks
+        assertEquals(WARM_WHITE, fade.last())
+        // monotonic: each step is no further from warm white than the previous one
+        fun dist(c: BulbCommand) = kotlin.math.abs(c.r - WARM_WHITE.r) + kotlin.math.abs(c.g - WARM_WHITE.g) +
+            kotlin.math.abs(c.b - WARM_WHITE.b) + kotlin.math.abs(c.dimming - WARM_WHITE.dimming)
+        fade.zipWithNext().forEach { (x, y) -> assertTrue(dist(y) <= dist(x)) }
+        val after = sink.sent.size
+        repeat(20) { t += step; e.tick(t) }
+        assertEquals(after, sink.sent.size)
+    }
+
+    @Test fun `static picture is still pinged every three seconds`() {
+        val src = FakeSource(); val sink = FakeSink()
+        var pings = 0
+        val counting = object : BulbSink by sink {
+            override fun ping(ip: String): Boolean { pings++; return true }
+        }
+        val s = Settings(MapStore())
+        s.upsertFromDiscovery(listOf(Discovered("1.1.1.1", "mac0"))); s.setPreset("party")
+        val e = SyncEngine(src, counting, s, clock = { 0L }, sleep = {})
+        src.frame = solid(200, 0, 0); e.tick(0)
+        assertEquals(1, sink.sent.size)
+        var t = 0L
+        while (t < 3_500_000_000L) { t += 33_000_000L; e.tick(t) }
+        assertEquals(1, sink.sent.size) // dead-band suppressed every send
+        assertTrue(pings >= 1)
+    }
+
+    @Test fun `restore on an unticked bulb sends warm white`() {
+        val src = FakeSource(); val sink = FakeSink(); val (e, s) = engine(src, sink, "1.1.1.1", "1.1.1.2")
+        s.setEnabled("mac1", false)
+        src.frame = solid(255, 0, 0); e.tick(0)
+        e.restore("1.1.1.2")
+        assertEquals("1.1.1.2" to WARM_WHITE, sink.sent.last())
+    }
+
+    @Test fun `restore while paused sends warm white`() {
+        val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1")
+        src.frame = solid(0, 0, 200); e.tick(0); src.frame = solid(1, 1, 1)
+        var t = 0L
+        while (t < 2_000_000_000L) { t += 33_000_000L; e.tick(t) }
+        assertEquals(SyncState.PausedNoPicture, e.state)
+        val before = sink.sent.size
+        e.restore("1.1.1.1")
+        assertEquals(before + 1, sink.sent.size)
+        assertEquals("1.1.1.1" to WARM_WHITE, sink.sent.last())
+    }
+
+    @Test fun `restore while syncing makes the next tick resend the current colour`() {
+        val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1")
+        src.frame = solid(255, 0, 0); e.tick(0)
+        val sent = sink.sent.last().second
+        e.restore("1.1.1.1")
+        assertEquals(1, sink.sent.size)
+        e.tick(50_000_000)
+        assertEquals(2, sink.sent.size)
+        assertEquals(sent, sink.sent.last().second)
+    }
+
+    @Test fun `restore after applyOff turns the bulb off`() {
+        val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1")
+        e.applyOff(); e.restore("1.1.1.1")
+        assertEquals("1.1.1.1" to false, sink.states.last())
+        assertTrue(sink.sent.isEmpty())
+    }
+
+    @Test fun `runLoop publishes Syncing on entry`() {
+        val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1")
+        val seen = mutableListOf<SyncState>()
+        e.onState = { seen += it }
+        var n = 0
+        e.runLoop(stop = { ++n > 1 })
+        assertTrue(seen.first() is SyncState.Syncing)
+        assertEquals(SyncState.Ready, e.state)
     }
 
     @Test fun `applyResting sends warm white and applyOff sends state false`() {

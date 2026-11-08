@@ -41,7 +41,9 @@ class SyncEngine(
     private var previousEnabled: Set<String> = emptySet()
 
     private var blackSinceNs = -1L
-    private var fadeStep = 0
+    private var pausedAtNs = 0L
+    private var fadeDone = false
+    private var lastTickNs = 0L
     private val fadeFrom = HashMap<String, BulbCommand>()
 
     private val sendCounts = HashMap<String, Int>()
@@ -57,6 +59,7 @@ class SyncEngine(
 
     fun runLoop(stop: () -> Boolean) {
         try {
+            state = SyncState.Syncing(0f, lastPipelineCmd ?: WARM_WHITE)
             while (!stop()) {
                 val t0 = clock()
                 tick(t0)
@@ -86,6 +89,20 @@ class SyncEngine(
         lastSentByIp.remove(ip)
     }
 
+    /**
+     * Hands a bulb back after something outside the engine (Identify) changed its colour: off if the engine has
+     * latched off, warm white when there is no sync colour to return to, otherwise the next tick re-sends the sync colour.
+     */
+    @Synchronized
+    fun restore(ip: String) {
+        when {
+            off -> sink.setState(ip, false)
+            state == SyncState.PausedNoPicture || ip !in enabledIps() || lastPipelineCmd == null ->
+                sendTo(ip, WARM_WHITE)
+            else -> forget(ip)
+        }
+    }
+
     /** Turns every enabled bulb off, muted or not, and latches: later ticks and the loop's exit send nothing. */
     @Synchronized
     fun applyOff() {
@@ -97,6 +114,7 @@ class SyncEngine(
     fun tick(nowNs: Long) {
         if (off) return
         val frame = source.latest() ?: return
+        lastTickNs = nowNs
         val preset = Presets.byId(settings.presetId)
         val enabled = enabledIps()
         restDisabled(enabled)
@@ -106,8 +124,8 @@ class SyncEngine(
         if (avgMax < BLACK_BELOW) {
             if (blackSinceNs < 0) blackSinceNs = nowNs
             if (state == SyncState.PausedNoPicture) {
-                fadeToResting(enabled)
-                pingWhilePaused(enabled, nowNs)
+                fadeToResting(enabled, nowNs)
+                pingIfDue(enabled, nowNs)
                 return
             }
             if (nowNs - blackSinceNs >= BLACK_HOLD_NS) {
@@ -126,6 +144,7 @@ class SyncEngine(
             val toSend = cmd ?: lastPipelineCmd?.takeIf { lastSentByIp[ip] != it }
             if (toSend != null) sendTo(ip, toSend)
         }
+        pingIfDue(enabled, nowNs)
         val shown = lastPipelineCmd ?: WARM_WHITE
         val current = state
         if (current !is SyncState.Syncing || current.fps != fps || current.color != shown) {
@@ -158,27 +177,28 @@ class SyncEngine(
     }
 
     private fun enterPaused(enabled: List<String>, nowNs: Long) {
-        fadeStep = 0
+        pausedAtNs = nowNs
+        fadeDone = false
         fadeFrom.clear()
         fadeFrom.putAll(lastSentByIp)
         for (ip in enabled) lastPingNs[ip] = nowNs
         state = SyncState.PausedNoPicture
     }
 
-    /** One of [FADE_STEPS] interpolated commands per tick from the last sent colour toward [WARM_WHITE]. */
-    private fun fadeToResting(enabled: List<String>) {
-        if (fadeStep >= FADE_STEPS) return
-        fadeStep++
-        val f = fadeStep.toFloat() / FADE_STEPS
+    /** At most one interpolated command per tick toward [WARM_WHITE] over [FADE_NS], then exactly [WARM_WHITE], then silence. */
+    private fun fadeToResting(enabled: List<String>, nowNs: Long) {
+        if (fadeDone) return
+        val f = minOf(1f, (nowNs - pausedAtNs).toFloat() / FADE_NS)
         for (ip in enabled) {
             if (ip in muted) continue
             val from = fadeFrom[ip]
             if (from == null) {
                 if (ip !in lastSentByIp) sendTo(ip, WARM_WHITE) // nothing to fade from: rest once
-            } else {
-                sendTo(ip, if (fadeStep == FADE_STEPS) WARM_WHITE else lerp(from, WARM_WHITE, f))
+            } else if (f > 0f) {
+                sendTo(ip, if (f >= 1f) WARM_WHITE else lerp(from, WARM_WHITE, f))
             }
         }
+        if (f >= 1f) fadeDone = true
     }
 
     private fun lerp(a: BulbCommand, b: BulbCommand, f: Float) = BulbCommand(
@@ -188,9 +208,10 @@ class SyncEngine(
         dimming = (a.dimming + (b.dimming - a.dimming) * f).roundToInt(),
     )
 
-    private fun pingWhilePaused(enabled: List<String>, nowNs: Long) {
+    /** Pings any bulb not pinged for [PING_EVERY_NS], whatever the send count. */
+    private fun pingIfDue(enabled: List<String>, nowNs: Long) {
         for (ip in enabled) {
-            if (nowNs - lastPingNs.getOrPut(ip) { nowNs } >= PAUSED_PING_NS) {
+            if (nowNs - lastPingNs.getOrPut(ip) { nowNs } >= PING_EVERY_NS) {
                 lastPingNs[ip] = nowNs
                 recordPing(ip)
             }
@@ -202,7 +223,10 @@ class SyncEngine(
         lastSentByIp[ip] = cmd
         val n = (sendCounts[ip] ?: 0) + 1
         sendCounts[ip] = n
-        if (n % PING_EVERY_SENDS == 0) recordPing(ip)
+        if (n % PING_EVERY_SENDS == 0) {
+            lastPingNs[ip] = lastTickNs
+            recordPing(ip)
+        }
     }
 
     /** Two consecutive misses mark the bulb unhealthy; any reply clears it. */
@@ -221,8 +245,8 @@ class SyncEngine(
         const val BLACK_BELOW = 8f
         const val ONE_SECOND_NS = 1_000_000_000L
         const val BLACK_HOLD_NS = ONE_SECOND_NS
-        const val PAUSED_PING_NS = 3_000_000_000L
-        const val FADE_STEPS = 5
+        const val PING_EVERY_NS = 3_000_000_000L
+        const val FADE_NS = 500_000_000f
         const val PING_EVERY_SENDS = 60
     }
 }

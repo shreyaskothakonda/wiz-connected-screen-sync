@@ -11,7 +11,7 @@ Tested on a Fire TV Stick 4K Max (Fire OS 7.7.1.3).
 - Turns the bulbs off when the Stick goes to sleep.
 - Works on YouTube, the home screen, and players such as Plex, Kodi and VLC.
 
-**What it does not do:** apps that mark their video as protected (most subscription streaming apps) capture as black, so the bulbs stay dark or dim. This is enforced by the system and cannot be worked around.
+**What it does not do:** apps that mark their video as protected (most subscription streaming apps) capture as black, so the bulbs fade to warm white after 1 s of black and resume when a picture returns. This is enforced by the system and cannot be worked around.
 
 ## Setup
 
@@ -24,7 +24,10 @@ Tested on a Fire TV Stick 4K Max (Fire OS 7.7.1.3).
 
 ## Build and install
 
-Prerequisite: `brew install openjdk@21`. `firetv/jdk.sh` exports `JAVA_HOME` for the Homebrew JDK (Apple Silicon path).
+Prerequisites:
+- `brew install openjdk@21`.
+- The Android SDK with Platform 36 and platform-tools, for example via Android Studio's SDK Manager. Alternatively install the command-line tools and accept the licences with `sdkmanager --licenses`.
+- `source firetv/jdk.sh` sets both `JAVA_HOME` (the Homebrew JDK) and `ANDROID_HOME` (default `~/Library/Android/sdk`). If you would rather not rely on the environment, run `echo "sdk.dir=$HOME/Library/Android/sdk" > firetv/local.properties` once instead.
 
 ```bash
 source firetv/jdk.sh
@@ -55,7 +58,7 @@ The brightness slider changes the floor for "follows the picture" presets and th
 
 - **No bulbs found:** the Stick and bulbs must share a Wi-Fi network (multicast not blocked, no guest or isolated network), and Allow local communication must be on in the WiZ app. Press **Find bulbs** again.
 - **"Not responding" badge on a bulb:** its IP has probably changed (router DHCP). Press **Find bulbs**.
-- **Bulbs stay dark while playing:** the app is probably protected content (see above). Try YouTube to confirm the setup works.
+- **Bulbs fade to warm white while playing:** the app is probably protected content (see above), so the capture is black. Try YouTube to confirm the setup works.
 
 ## Known limitations
 

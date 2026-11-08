@@ -68,7 +68,10 @@ class Pipeline(val clock: () -> Long = System::nanoTime) {
 
         val last = lastSent
         if (last != null &&
-            maxOf(abs(cmd.r - last.r), abs(cmd.g - last.g), abs(cmd.b - last.b)) <= 2 &&
+            ColorMath.distance(
+                floatArrayOf(cmd.r.toFloat(), cmd.g.toFloat(), cmd.b.toFloat()),
+                floatArrayOf(last.r.toFloat(), last.g.toFloat(), last.b.toFloat()),
+            ) <= 2f &&
             abs(cmd.dimming - last.dimming) <= 1
         ) {
             return null

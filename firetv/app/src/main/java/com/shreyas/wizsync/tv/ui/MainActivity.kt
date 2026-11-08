@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private var state: SyncState = SyncState.Ready
     private var notice: String? = null
     private var discovering = false
+    private var unhealthyIps: Set<String> = emptySet()
 
     private val running: Boolean get() = state is SyncState.Syncing || state is SyncState.PausedNoPicture
 
@@ -70,7 +71,12 @@ class MainActivity : AppCompatActivity() {
     /** Once a second while visible: refresh the warning badges (unhealthy bulbs change independently of state events). */
     private val poll = object : Runnable {
         override fun run() {
-            adapter.setUnhealthy(binder?.engine?.unhealthy ?: emptySet())
+            val unhealthy = binder?.engine?.unhealthy?.toSet() ?: emptySet()
+            adapter.setUnhealthy(unhealthy)
+            if (unhealthy != unhealthyIps) {
+                unhealthyIps = unhealthy
+                render()
+            }
             main.postDelayed(this, POLL_MS)
         }
     }
@@ -126,7 +132,7 @@ class MainActivity : AppCompatActivity() {
     // ---- rendering --------------------------------------------------------------------------------------
 
     private fun render() {
-        ui.status.text = notice ?: vm.statusText(state)
+        ui.status.text = notice ?: unresponsiveText() ?: vm.statusText(state)
         ui.startStop.text = vm.startLabel(state)
         val startEnabled = vm.canStart || running
         ui.startStop.isEnabled = startEnabled
@@ -139,6 +145,14 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.getColor(this, R.color.wiz_border)
         }
         (ui.swatch.background.mutate() as GradientDrawable).setColor(argb)
+    }
+
+    /** While syncing, names the first bulb the engine reports as not responding. */
+    private fun unresponsiveText(): String? {
+        if (!running) return null
+        val ip = unhealthyIps.firstOrNull() ?: return null
+        val name = App.settings.bulbs.firstOrNull { it.ip == ip }?.name ?: ip
+        return getString(R.string.status_bulb_unresponsive, name)
     }
 
     private fun renderPreset() {

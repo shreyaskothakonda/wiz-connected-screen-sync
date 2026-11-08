@@ -8,10 +8,11 @@
     <string name="find_bulbs">Find bulbs</string>
     <string name="no_bulbs_hint">No bulbs yet. Choose Find bulbs.</string>
     <string name="bulb_unresponsive">Bulb not responding</string>
+    <string name="status_bulb_unresponsive">Bulb %1$s not responding</string>
     <string name="percent_format">%d%%</string>
     <string name="badge_glyph">!</string>
     <string name="brightness_hint">◀ ▶ adjusts in steps of 5</string>
-    <string name="consent_note">Fire OS asks for screen-capture permission each time you start.</string>
+    <string name="consent_note">Fire OS asks for screen-capture permission when you start (tick Don\'t show again to skip it next time).</string>
 
     <string name="preset_desc_instant">Average colour, no smoothing, 30 updates a second</string>
     <string name="preset_desc_movie">Smoothed average colour, follows brightness</string>
