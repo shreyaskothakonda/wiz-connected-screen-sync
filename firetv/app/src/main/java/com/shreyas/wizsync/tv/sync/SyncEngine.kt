@@ -52,29 +52,40 @@ class SyncEngine(
     private var framesInWindow = 0
     private var fps = 0f
 
+    /** Set by [applyOff]; once latched, ticks do nothing and [runLoop] does not rest the bulbs. */
+    @Volatile private var off = false
+
     fun runLoop(stop: () -> Boolean) {
-        while (!stop()) {
-            val t0 = clock()
-            tick(t0)
-            val elapsedMs = (clock() - t0) / 1_000_000
-            val periodMs = (1000f / Presets.byId(settings.presetId).rate).toLong()
-            if (periodMs > elapsedMs) sleep(periodMs - elapsedMs)
+        try {
+            while (!stop()) {
+                val t0 = clock()
+                tick(t0)
+                val elapsedMs = (clock() - t0) / 1_000_000
+                val periodMs = (1000f / Presets.byId(settings.presetId).rate).toLong()
+                if (periodMs > elapsedMs) sleep(periodMs - elapsedMs)
+            }
+        } finally {
+            if (!off) applyResting()
+            state = SyncState.Ready
         }
-        applyResting()
-        state = SyncState.Ready
     }
 
     /** Sends [WARM_WHITE] to every enabled, unmuted bulb. Does not change [state]. */
+    @Synchronized
     fun applyResting() {
         for (ip in enabledIps()) if (ip !in muted) sendTo(ip, WARM_WHITE)
     }
 
-    /** Turns every enabled bulb off, muted or not. Does not change [state]. */
+    /** Turns every enabled bulb off, muted or not, and latches: later ticks and the loop's exit send nothing. */
+    @Synchronized
     fun applyOff() {
+        off = true
         for (ip in enabledIps()) sink.setState(ip, false)
     }
 
+    @Synchronized
     fun tick(nowNs: Long) {
+        if (off) return
         val frame = source.latest() ?: return
         val preset = Presets.byId(settings.presetId)
         val enabled = enabledIps()
@@ -101,7 +112,8 @@ class SyncEngine(
         if (cmd != null) lastPipelineCmd = cmd
         for (ip in enabled) {
             if (ip in muted) continue
-            val toSend = cmd ?: if (ip !in lastSentByIp) lastPipelineCmd else null
+            // the pipeline's dead-band only knows its own history; re-sync any bulb that shows something else
+            val toSend = cmd ?: lastPipelineCmd?.takeIf { lastSentByIp[ip] != it }
             if (toSend != null) sendTo(ip, toSend)
         }
         val shown = lastPipelineCmd ?: WARM_WHITE
@@ -151,7 +163,11 @@ class SyncEngine(
         for (ip in enabled) {
             if (ip in muted) continue
             val from = fadeFrom[ip]
-            sendTo(ip, if (from == null || fadeStep == FADE_STEPS) WARM_WHITE else lerp(from, WARM_WHITE, f))
+            if (from == null) {
+                if (ip !in lastSentByIp) sendTo(ip, WARM_WHITE) // nothing to fade from: rest once
+            } else {
+                sendTo(ip, if (fadeStep == FADE_STEPS) WARM_WHITE else lerp(from, WARM_WHITE, f))
+            }
         }
     }
 
@@ -164,7 +180,7 @@ class SyncEngine(
 
     private fun pingWhilePaused(enabled: List<String>, nowNs: Long) {
         for (ip in enabled) {
-            if (nowNs - (lastPingNs[ip] ?: nowNs) >= PAUSED_PING_NS) {
+            if (nowNs - lastPingNs.getOrPut(ip) { nowNs } >= PAUSED_PING_NS) {
                 lastPingNs[ip] = nowNs
                 recordPing(ip)
             }

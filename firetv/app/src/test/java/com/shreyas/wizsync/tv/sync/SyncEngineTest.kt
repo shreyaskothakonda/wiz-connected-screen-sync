@@ -95,6 +95,45 @@ class SyncEngineTest {
         assertTrue(sink.sent.isNotEmpty()); assertTrue(sink.sent.none { it.first == "1.1.1.2" })
     }
 
+    @Test fun `same colour returning after a black pause is resent`() {
+        val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1")
+        src.frame = solid(0, 0, 255); e.tick(0)
+        src.frame = solid(2, 2, 2)
+        var t = 0L
+        while (t < 1_600_000_000) { t += 50_000_000; e.tick(t) }
+        assertEquals(SyncState.PausedNoPicture, e.state)
+        src.frame = solid(0, 0, 255); e.tick(t + 50_000_000)
+        val c = sink.sent.last().second
+        assertEquals(Triple(0, 0, 255), Triple(c.r, c.g, c.b))
+    }
+
+    @Test fun `unmuted bulb is brought back to the current colour`() {
+        val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1", "1.1.1.2")
+        e.muted += "1.1.1.2"; src.frame = solid(255, 0, 0)
+        for (i in 0..4) e.tick(i * 50_000_000L)
+        assertTrue(sink.sent.none { it.first == "1.1.1.2" })
+        e.muted -= "1.1.1.2"; e.tick(300_000_000)
+        val c = sink.sent.last { it.first == "1.1.1.2" }.second
+        assertEquals(255, c.r); assertEquals(0, c.b)
+    }
+
+    @Test fun `applyOff latches so ticks send nothing`() {
+        val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1")
+        src.frame = solid(255, 0, 0); e.tick(0); e.applyOff()
+        val sends = sink.sent.size
+        src.frame = solid(0, 0, 255)
+        for (i in 1..5) e.tick(i * 50_000_000L)
+        assertEquals(sends, sink.sent.size)
+    }
+
+    @Test fun `runLoop after applyOff does not rest the bulbs`() {
+        val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1")
+        src.frame = solid(0, 200, 0); e.applyOff(); var n = 0
+        e.runLoop(stop = { ++n > 3 })
+        assertTrue(sink.sent.isEmpty()); assertEquals("1.1.1.1" to false, sink.states.last())
+        assertEquals(SyncState.Ready, e.state)
+    }
+
     @Test fun `runLoop stops and applies resting`() {
         val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1")
         src.frame = solid(0, 200, 0); var n = 0
