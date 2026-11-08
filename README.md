@@ -95,6 +95,10 @@ Settings persist in `config.json` (git-ignored, because it holds Tuya keys). See
 .venv/bin/pytest      # unit + engine tests, no hardware needed
 ```
 
+## Fire TV app
+
+A standalone Kotlin app for the Fire TV Stick syncs WiZ bulbs to the TV screen with no PC involved. Build, sideload and usage instructions are in [`firetv/README.md`](firetv/README.md).
+
 ## Security
 
 The server binds to `127.0.0.1` only and has no authentication, so don't expose it to your network. Keep `config.json`, `tinytuya.json`, `devices.json` and `snapshot.json` private; they're in `.gitignore`.
