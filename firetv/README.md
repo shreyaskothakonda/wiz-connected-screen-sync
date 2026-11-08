@@ -43,7 +43,7 @@ Pick a preset, adjust brightness if you like, and press **Start**. Fire OS shows
 
 | Preset | Colour pick | Brightness | Updates/s |
 | --- | --- | --- | --- |
-| Instant (default) | Average, no smoothing, black bars ignored | Follows the picture, floor 15% | 30 |
+| Instant (default) | Average, no smoothing, black bars ignored | Full brightness (floor 100%; lower it to let dark scenes dim) | 30 |
 | Movie | Average, smoothed, black bars ignored | Follows the picture, floor 15% | 20 |
 | Gaming | Dominant colour, light smoothing | Follows the picture, floor 20% | 30 |
 | Ambient | Average, heavy smoothing, black bars ignored | Fixed at 60% | 10 |

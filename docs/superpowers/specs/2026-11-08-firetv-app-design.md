@@ -286,7 +286,7 @@ the same moment averaged `r=34 g=27 b=24`, matching the spike. Over ~60 s: 115 f
 
 - **Fifth preset, "Instant".** The owner asked for the sync to feel instant. Add `Presets.INSTANT`
   (`id="instant"`, label "Instant", mode AVERAGE, smoothing 0, saturation 1.3, FOLLOW with min
-  brightness 15, lead 0 ms, rate 30 Hz, ignoreBlackBars true) as the first chip on the main screen,
+  brightness 100 (owner ruling: full brightness by default; lower the slider to let dark scenes dim), lead 0 ms, rate 30 Hz, ignoreBlackBars true) as the first chip on the main screen,
   and make it the default preset for a fresh install. The remaining latency is the bulb's own
   internal fade, which WiZ firmware controls.
 - The four original presets stay as the "colour modes" the owner can pick between.

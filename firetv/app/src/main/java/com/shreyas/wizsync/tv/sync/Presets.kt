@@ -23,7 +23,7 @@ data class Preset(
 object Presets {
     val INSTANT = Preset(
         id = "instant", label = "Instant", mode = Mode.AVERAGE, smoothing = 0f, saturation = 1.3f,
-        brightnessMode = BrightnessMode.FOLLOW, defaultBrightness = 15, leadMs = 0, rate = 30f,
+        brightnessMode = BrightnessMode.FOLLOW, defaultBrightness = 100, leadMs = 0, rate = 30f,
         ignoreBlackBars = true,
     )
     val MOVIE = Preset(

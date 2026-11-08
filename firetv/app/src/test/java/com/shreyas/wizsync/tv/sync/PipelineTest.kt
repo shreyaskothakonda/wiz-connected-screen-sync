@@ -20,7 +20,7 @@ class PipelineTest {
         assertEquals(0f, Presets.INSTANT.smoothing)
         assertEquals(1.3f, Presets.INSTANT.saturation)
         assertEquals(BrightnessMode.FOLLOW, Presets.INSTANT.brightnessMode)
-        assertEquals(15, Presets.INSTANT.defaultBrightness)
+        assertEquals(100, Presets.INSTANT.defaultBrightness)
         assertEquals(0, Presets.INSTANT.leadMs)
         assertEquals(30f, Presets.INSTANT.rate)
         assertTrue(Presets.INSTANT.ignoreBlackBars)
