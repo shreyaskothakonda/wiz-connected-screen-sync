@@ -14,6 +14,17 @@ private fun solid(r: Int, g: Int, b: Int): Frame =
 class PipelineTest {
     @Test
     fun `presets match engine py`() {
+        assertEquals(listOf("instant", "movie", "gaming", "ambient", "party"), Presets.ALL.map { it.id })
+        assertEquals("Instant", Presets.INSTANT.label)
+        assertEquals(Mode.AVERAGE, Presets.INSTANT.mode)
+        assertEquals(0f, Presets.INSTANT.smoothing)
+        assertEquals(1.3f, Presets.INSTANT.saturation)
+        assertEquals(BrightnessMode.FOLLOW, Presets.INSTANT.brightnessMode)
+        assertEquals(15, Presets.INSTANT.defaultBrightness)
+        assertEquals(0, Presets.INSTANT.leadMs)
+        assertEquals(30f, Presets.INSTANT.rate)
+        assertTrue(Presets.INSTANT.ignoreBlackBars)
+
         assertEquals(Mode.AVERAGE, Presets.MOVIE.mode)
         assertEquals(0.45f, Presets.MOVIE.smoothing)
         assertEquals(1.4f, Presets.MOVIE.saturation)

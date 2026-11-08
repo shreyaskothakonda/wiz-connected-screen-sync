@@ -21,6 +21,11 @@ data class Preset(
 )
 
 object Presets {
+    val INSTANT = Preset(
+        id = "instant", label = "Instant", mode = Mode.AVERAGE, smoothing = 0f, saturation = 1.3f,
+        brightnessMode = BrightnessMode.FOLLOW, defaultBrightness = 15, leadMs = 0, rate = 30f,
+        ignoreBlackBars = true,
+    )
     val MOVIE = Preset(
         id = "movie", label = "Movie", mode = Mode.AVERAGE, smoothing = 0.45f, saturation = 1.4f,
         brightnessMode = BrightnessMode.FOLLOW, defaultBrightness = 15, leadMs = 80, rate = 20f,
@@ -42,7 +47,7 @@ object Presets {
         ignoreBlackBars = false,
     )
 
-    val ALL: List<Preset> = listOf(MOVIE, GAMING, AMBIENT, PARTY)
+    val ALL: List<Preset> = listOf(INSTANT, MOVIE, GAMING, AMBIENT, PARTY)
 
     fun byId(id: String): Preset =
         ALL.firstOrNull { it.id == id } ?: throw IllegalArgumentException("Unknown preset: $id")

@@ -161,7 +161,7 @@ class Settings(private val store: KeyValueStore) {
 
     companion object {
         const val KEY = "settings"
-        const val DEFAULT_PRESET = "movie"
+        const val DEFAULT_PRESET = "instant"
         const val MIN_BRIGHTNESS = 10
         const val MAX_BRIGHTNESS = 100
 

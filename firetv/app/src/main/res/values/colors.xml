@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="wiz_background">#101418</color>
+    <color name="wiz_surface">#1a2027</color>
+    <color name="wiz_text">#eef2f6</color>
+    <color name="wiz_text_secondary">#aeb8c3</color>
+    <color name="wiz_text_muted">#8d99a6</color>
+    <color name="wiz_text_dim">#6f7c8a</color>
+    <color name="wiz_border">#2b3440</color>
+    <color name="wiz_accent">#ffb454</color>
+    <color name="wiz_transparent">#00000000</color>
+    <color name="chip_text_selected">#101418</color>
+</resources>

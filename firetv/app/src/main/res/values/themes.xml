@@ -1,7 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="wiz_background">#101418</color>
     <style name="Theme.WizSync" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@color/wiz_background</item>
+    </style>
+
+    <!-- Pill used for the preset chips and the Find bulbs button. -->
+    <style name="Chip">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">60dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">30dp</item>
+        <item name="android:paddingEnd">30dp</item>
+        <item name="android:background">@drawable/chip_bg</item>
+        <item name="android:textColor">@color/chip_text</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
+    <style name="SectionLabel">
+        <item name="android:textColor">@color/wiz_text_secondary</item>
+        <item name="android:textSize">26sp</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.1</item>
     </style>
 </resources>

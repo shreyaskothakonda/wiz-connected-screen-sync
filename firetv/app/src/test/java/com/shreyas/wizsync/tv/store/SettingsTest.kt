@@ -9,7 +9,8 @@ import org.junit.Test
 class SettingsTest {
     @Test fun `defaults`() {
         val s = Settings(MapStore())
-        assertEquals("movie", s.presetId)
+        assertEquals("instant", s.presetId)
+        assertEquals(15, s.brightnessFor("instant"))
         assertEquals(15, s.brightnessFor("movie"))
         assertEquals(100, s.brightnessFor("party"))
         assertTrue(s.bulbs.isEmpty())
