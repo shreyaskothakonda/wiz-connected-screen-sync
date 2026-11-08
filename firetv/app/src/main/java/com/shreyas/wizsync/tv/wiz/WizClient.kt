@@ -17,6 +17,7 @@ data class Discovered(val ip: String, val mac: String)
 class WizClient(val port: Int = 38899) : Closeable {
     private val socket = DatagramSocket()
     @Volatile private var closed = false
+    private var pingId = 0
 
     fun send(ip: String, cmd: BulbCommand) = transmit(ip, WizJson.setPilot(cmd))
 
@@ -45,7 +46,9 @@ class WizClient(val port: Int = 38899) : Closeable {
                 for (round in 1..2) {
                     s.send(DatagramPacket(data, data.size, target, port))
                     val roundEnd = start + timeoutMs * 1_000_000L * round / 2
-                    collect(s, roundEnd) { ip, mac -> found.putIfAbsent(ip, Discovered(ip, mac)) }
+                    collect(s, roundEnd) { ip, reply ->
+                        WizJson.parseMac(reply)?.let { found.putIfAbsent(ip, Discovered(ip, it)) }
+                    }
                 }
             }
         } catch (e: IOException) {
@@ -54,21 +57,36 @@ class WizClient(val port: Int = 38899) : Closeable {
         return found.values.toList()
     }
 
-    /** True when [ip] answers a getPilot with a parseable MAC within [timeoutMs]; unrelated packets are drained. */
+    /**
+     * True when [ip] answers a getPilot with a MAC and the request's id within [timeoutMs]; returns on the first
+     * such reply. Stale or unrelated packets (other IPs, other ids) are ignored.
+     */
     @Synchronized
     fun ping(ip: String, timeoutMs: Long = 500): Boolean {
         if (closed) return false
         return try {
-            val data = WizJson.getPilot.toByteArray(Charsets.UTF_8)
+            drain()
+            val id = ++pingId
+            val data = WizJson.getPilot(id).toByteArray(Charsets.UTF_8)
             val target = InetAddress.getByName(ip)
             socket.send(DatagramPacket(data, data.size, target, port))
-            var matched = false
-            collect(socket, System.nanoTime() + timeoutMs * 1_000_000L) { from, _ ->
-                if (from == target.hostAddress) matched = true
+            collect(socket, System.nanoTime() + timeoutMs * 1_000_000L) { from, reply ->
+                if (from == target.hostAddress && WizJson.parseId(reply) == id && WizJson.parseMac(reply) != null) return true
             }
-            matched
+            false
         } catch (e: IOException) {
             false
+        }
+    }
+
+    /** Discards packets already queued on the main socket (replies to earlier setPilot/ping calls). */
+    private fun drain() {
+        val p = DatagramPacket(ByteArray(2048), 2048)
+        socket.soTimeout = 1
+        try {
+            while (true) socket.receive(p)
+        } catch (e: SocketTimeoutException) {
+            // queue is empty
         }
     }
 
@@ -90,8 +108,8 @@ class WizClient(val port: Int = 38899) : Closeable {
         socket.close()
     }
 
-    /** Reads datagrams from [s] until [deadlineNanos], passing each reply that carries a MAC to [onReply]. */
-    private inline fun collect(s: DatagramSocket, deadlineNanos: Long, onReply: (ip: String, mac: String) -> Unit) {
+    /** Reads datagrams from [s] until [deadlineNanos], passing each datagram (source IP, text) to [onReply]. */
+    private inline fun collect(s: DatagramSocket, deadlineNanos: Long, onReply: (ip: String, reply: String) -> Unit) {
         val buf = ByteArray(2048)
         while (true) {
             val remainingMs = (deadlineNanos - System.nanoTime()) / 1_000_000L
@@ -103,8 +121,7 @@ class WizClient(val port: Int = 38899) : Closeable {
             } catch (e: SocketTimeoutException) {
                 return
             }
-            val mac = WizJson.parseMac(String(p.data, 0, p.length, Charsets.UTF_8)) ?: continue
-            onReply(p.address.hostAddress ?: continue, mac)
+            onReply(p.address.hostAddress ?: continue, String(p.data, 0, p.length, Charsets.UTF_8))
         }
     }
 }

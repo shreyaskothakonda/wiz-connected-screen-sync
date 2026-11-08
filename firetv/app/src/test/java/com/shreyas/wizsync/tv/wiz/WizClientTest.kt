@@ -19,6 +19,8 @@ class FakeBulb(val mac: String) : Closeable {
     val socket = DatagramSocket(0, InetAddress.getLoopbackAddress())
     val received = CopyOnWriteArrayList<String>()
     @Volatile var answer = true
+    /** When set, replies carry this id instead of echoing the request's (simulates a stale reply). */
+    @Volatile var replyId: Int? = null
 
     private val thread = Thread {
         val buf = ByteArray(2048)
@@ -32,7 +34,9 @@ class FakeBulb(val mac: String) : Closeable {
             val text = String(p.data, 0, p.length, Charsets.UTF_8)
             received.add(text)
             if (answer && text.contains("getPilot")) {
-                val reply = """{"method":"getPilot","result":{"mac":"$mac","state":true}}""".toByteArray()
+                val id = replyId ?: JSONObject(text).takeIf { it.has("id") }?.getInt("id")
+                val idField = if (id != null) "\"id\":$id," else ""
+                val reply = """{$idField"method":"getPilot","result":{"mac":"$mac","state":true}}""".toByteArray()
                 socket.send(DatagramPacket(reply, reply.size, p.address, p.port))
             }
         }
@@ -80,6 +84,38 @@ class WizClientTest {
                 assertTrue(c.ping("127.0.0.1", 500))
                 b.answer = false
                 assertFalse(c.ping("127.0.0.1", 300))
+            }
+        }
+    }
+
+    @Test fun `ping returns as soon as the bulb answers`() {
+        FakeBulb("aa").use { b ->
+            WizClient(b.socket.localPort).use { c ->
+                val start = System.nanoTime()
+                assertTrue(c.ping("127.0.0.1", 1000))
+                val elapsedMs = (System.nanoTime() - start) / 1_000_000
+                assertTrue(elapsedMs < 500, "ping took ${elapsedMs}ms")
+            }
+        }
+    }
+
+    // A reply from a different IP cannot be built on loopback, so a mac-bearing reply with the wrong id stands in
+    // for both a stale reply and an unrelated sender.
+    @Test fun `ping ignores a mac-bearing reply with the wrong id`() {
+        FakeBulb("aa").use { b ->
+            b.replyId = 999
+            WizClient(b.socket.localPort).use { c -> assertFalse(c.ping("127.0.0.1", 300)) }
+        }
+    }
+
+    @Test fun `ping is not fooled by a stale reply from a timed-out ping`() {
+        FakeBulb("aa").use { b ->
+            WizClient(b.socket.localPort).use { c ->
+                b.replyId = 999
+                assertFalse(c.ping("127.0.0.1", 200))
+                b.replyId = null
+                b.answer = false
+                assertFalse(c.ping("127.0.0.1", 200))
             }
         }
     }
