@@ -37,7 +37,7 @@ Run the unit tests with `./gradlew test`. Then launch **WiZ Sync** from Your App
 
 ## Using it
 
-Pick a preset, adjust brightness if you like, and press **Start**. Android shows a screen-capture consent dialog on each Start (Fire OS may remember it within one power cycle); accept it. Press **Stop** to end the sync. When the Stick sleeps, the bulbs are turned off.
+Pick a preset, adjust brightness if you like, and press **Start**. Fire OS shows a screen-capture consent dialog on each Start; choose **Start now** (ticking **Don't show again** skips it on later starts). Press **Stop** to end the sync. When the Stick sleeps, the bulbs are turned off.
 
 ## Presets
 
