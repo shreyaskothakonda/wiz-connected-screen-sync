@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- In-app title and notification title. -->
     <string name="app_name">WiZ Sync</string>
+    <!-- Store-facing product name: installed-app label and Appstore display title. Leads with what the app
+         does; "WiZ" appears only descriptively to state compatibility (docs/appstore-checklist.md, section 8). -->
+    <string name="store_name">Screen Sync for WiZ lights</string>
+    <string name="affiliation_note">Not affiliated with Signify or WiZ. WiZ is a trademark of Signify Holding B.V.</string>
     <string name="notification_channel_name">WiZ Sync</string>
 
     <string name="section_bulbs">Bulbs</string>
