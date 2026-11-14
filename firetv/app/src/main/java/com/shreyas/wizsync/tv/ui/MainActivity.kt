@@ -21,6 +21,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.shreyas.wizsync.tv.App
 import com.shreyas.wizsync.tv.R
 import com.shreyas.wizsync.tv.databinding.ActivityMainBinding
+import com.shreyas.wizsync.tv.store.Bulb
 import com.shreyas.wizsync.tv.sync.Presets
 import com.shreyas.wizsync.tv.sync.SyncService
 import com.shreyas.wizsync.tv.sync.SyncState
@@ -46,6 +47,7 @@ class MainActivity : AppCompatActivity() {
     private var notice: String? = null
     private var discovering = false
     private var unhealthyIps: Set<String> = emptySet()
+    private var shownBulbs: List<Bulb> = emptyList()
 
     private val running: Boolean get() = state is SyncState.Syncing || state is SyncState.PausedNoPicture
 
@@ -72,6 +74,8 @@ class MainActivity : AppCompatActivity() {
     private val poll = object : Runnable {
         override fun run() {
             val unhealthy = binder?.engine?.unhealthy?.toSet() ?: emptySet()
+            // the sync service corrects a bulb's address by itself when it moves; show the corrected list
+            if (App.settings.bulbs != shownBulbs) refreshBulbs()
             adapter.setUnhealthy(unhealthy)
             if (unhealthy != unhealthyIps) {
                 unhealthyIps = unhealthy
@@ -170,6 +174,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshBulbs() {
         val bulbs = App.settings.bulbs
+        shownBulbs = bulbs
         adapter.submit(bulbs, binder?.engine?.unhealthy ?: emptySet())
         ui.noBulbs.visibility = if (bulbs.isEmpty()) View.VISIBLE else View.GONE
         render()

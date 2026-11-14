@@ -177,6 +177,47 @@ class SyncEngineTest {
         assertFalse("1.1.1.1" in e.unhealthy)
     }
 
+    @Test fun `unhealthy bulb triggers a re-find at once and then at most every ten seconds`() {
+        val src = FakeSource(); val sink = FakeSink(); sink.alive = false
+        val s = Settings(MapStore()); s.upsertFromDiscovery(listOf(Discovered("1.1.1.1", "mac0"))); s.setPreset("party")
+        val calls = mutableListOf<Long>()
+        var t = 0L
+        val e = SyncEngine(src, sink, s, clock = { t }, sleep = {}, refind = { calls += t })
+        fun run(n: Int) = repeat(n) { i ->
+            t += 40_000_000
+            src.frame = if (i % 2 == 0) solid(200, 0, 0) else solid(0, 0, 200)
+            e.tick(t)
+        }
+        run(100) // 4 s: not yet two misses (pings ride on every 60th send)
+        assertTrue(calls.isEmpty())
+        run(30)
+        assertEquals(1, calls.size)
+        run(200) // 8 s more
+        assertEquals(1, calls.size)
+        run(100) // past ten seconds since the first
+        assertEquals(2, calls.size)
+    }
+
+    @Test fun `a bulb that moved gets the sync colour at its new address and the old one gets nothing more`() {
+        val src = FakeSource(); val sink = FakeSink(); sink.alive = false
+        val s = Settings(MapStore()); s.upsertFromDiscovery(listOf(Discovered("1.1.1.1", "mac0"))); s.setPreset("party")
+        var t = 0L
+        val e = SyncEngine(src, sink, s, clock = { t }, sleep = {}, refind = { s.updateIp("mac0", "1.1.1.9") })
+        repeat(130) { i ->
+            t += 40_000_000
+            src.frame = if (i % 2 == 0) solid(200, 0, 0) else solid(0, 0, 200)
+            e.tick(t)
+        }
+        val before = sink.sent.size
+        sink.alive = true
+        src.frame = solid(0, 200, 0); t += 40_000_000; e.tick(t)
+        val after = sink.sent.drop(before)
+        assertEquals(listOf("1.1.1.9"), after.map { it.first }) // no parting warm white to whoever holds the old address
+        assertEquals(255, after.single().second.g)
+        assertFalse("1.1.1.1" in e.unhealthy)
+        assertFalse("1.1.1.9" in e.unhealthy)
+    }
+
     @Test fun `muted bulb receives nothing`() {
         val src = FakeSource(); val sink = FakeSink(); val (e, _) = engine(src, sink, "1.1.1.1", "1.1.1.2")
         e.muted += "1.1.1.2"; src.frame = solid(200, 0, 0); e.tick(0)
