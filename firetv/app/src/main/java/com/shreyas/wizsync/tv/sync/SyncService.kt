@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
+import android.net.wifi.WifiManager
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
@@ -18,6 +19,8 @@ import android.os.Looper
 import android.util.Log
 import com.shreyas.wizsync.tv.App
 import com.shreyas.wizsync.tv.R
+import com.shreyas.wizsync.tv.wiz.BulbRefinder
+import com.shreyas.wizsync.tv.wiz.Discovered
 import com.shreyas.wizsync.tv.wiz.WizSink
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
@@ -112,7 +115,10 @@ class SyncService : Service() {
             cur.source = src
             val snk = WizSink(App.wiz)
             cur.sink = snk
-            val eng = SyncEngine(src, snk, App.settings)
+            val refinder = BulbRefinder(App.settings, ::discoverWithLock) { mac, from, to ->
+                Log.i(TAG, "bulb $mac moved $from -> $to")
+            }
+            val eng = SyncEngine(src, snk, App.settings, refind = refinder::request)
             eng.onState = { st -> main.post { listeners.forEach { it(st) } } }
             cur.engine = eng
             registerReceiver(screenOff, IntentFilter(Intent.ACTION_SCREEN_OFF))
@@ -166,6 +172,18 @@ class SyncService : Service() {
         try { s.projection.stop() } catch (e: Exception) { Log.w(TAG, "projection.stop", e) }
         s.sink?.shutdown()
         if (session === s) session = null
+    }
+
+    /** One discovery broadcast, holding the Wi-Fi multicast lock for its duration (as Find bulbs does). */
+    private fun discoverWithLock(): List<Discovered> {
+        val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val lock = wifi.createMulticastLock("wizsync-refind")
+        try {
+            lock.acquire()
+            return App.wiz.discover()
+        } finally {
+            if (lock.isHeld) lock.release()
+        }
     }
 
     override fun onDestroy() {

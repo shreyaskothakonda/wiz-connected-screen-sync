@@ -14,6 +14,9 @@ sealed class SyncState {
 /**
  * The capture -> colour -> bulbs loop, free of Android APIs. Drive [tick] directly in tests, or [runLoop] in a service.
  * Port of Engine._loop in app/engine.py, plus black-picture fallback and bulb health checks.
+ *
+ * [refind] is called (on the loop thread, so it must not block) while a ticked bulb is unhealthy, at most every
+ * [REFIND_EVERY_NS]; it is expected to look the bulbs up again and update their addresses in [settings].
  */
 class SyncEngine(
     val source: FrameSource,
@@ -21,6 +24,7 @@ class SyncEngine(
     val settings: Settings,
     val clock: () -> Long = System::nanoTime,
     val sleep: (Long) -> Unit = Thread::sleep,
+    val refind: (() -> Unit)? = null,
 ) {
     @Volatile var state: SyncState = SyncState.Ready
         private set(value) {
@@ -49,6 +53,7 @@ class SyncEngine(
     private val sendCounts = HashMap<String, Int>()
     private val missStreak = HashMap<String, Int>()
     private val lastPingNs = HashMap<String, Long>()
+    private var lastRefindNs = -1L
 
     private var fpsWindowStartNs = -1L
     private var framesInWindow = 0
@@ -159,9 +164,13 @@ class SyncEngine(
     private fun restDisabled(enabled: List<String>) {
         val now = enabled.toSet()
         for (ip in previousEnabled - now) {
-            if (ip !in muted) sink.send(ip, WARM_WHITE)
+            // an unhealthy address is skipped: the bulb is not there (it may have moved and another device may be)
+            if (ip !in muted && ip !in unhealthySet) sink.send(ip, WARM_WHITE)
             lastSentByIp.remove(ip)
             unhealthySet.remove(ip)
+            missStreak.remove(ip)
+            sendCounts.remove(ip)
+            lastPingNs.remove(ip)
         }
         previousEnabled = now
     }
@@ -217,6 +226,16 @@ class SyncEngine(
                 recordPing(ip)
             }
         }
+        refindIfDue(enabled, nowNs)
+    }
+
+    /** While a ticked bulb is unhealthy, asks for a re-find straight away and then every [REFIND_EVERY_NS]. */
+    private fun refindIfDue(enabled: List<String>, nowNs: Long) {
+        val hook = refind ?: return
+        if (enabled.none { it in unhealthySet }) return
+        if (lastRefindNs >= 0 && nowNs - lastRefindNs < REFIND_EVERY_NS) return
+        lastRefindNs = nowNs
+        hook()
     }
 
     private fun sendTo(ip: String, cmd: BulbCommand) {
@@ -249,5 +268,6 @@ class SyncEngine(
         const val PING_EVERY_NS = 3_000_000_000L
         const val FADE_NS = 500_000_000f
         const val PING_EVERY_SENDS = 60
+        const val REFIND_EVERY_NS = 10_000_000_000L
     }
 }

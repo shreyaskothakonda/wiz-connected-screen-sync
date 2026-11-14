@@ -57,7 +57,7 @@ The brightness slider changes the floor for "follows the picture" presets and th
 ## Troubleshooting
 
 - **No bulbs found:** the Stick and bulbs must share a Wi-Fi network (multicast not blocked, no guest or isolated network), and Allow local communication must be on in the WiZ app. Press **Find bulbs** again.
-- **"Not responding" badge on a bulb:** its IP has probably changed (router DHCP). Press **Find bulbs**.
+- **"Not responding" badge on a bulb:** its IP has probably changed (router DHCP). While syncing, the app looks the bulb up again by itself within a few seconds and carries on; when not syncing, press **Find bulbs**. If the badge stays, the bulb is off or on another network.
 - **Bulbs fade to warm white while playing:** the app is probably protected content (see above), so the capture is black. Try YouTube to confirm the setup works.
 
 ## Known limitations
